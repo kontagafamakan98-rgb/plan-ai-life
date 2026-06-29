@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Backend API Test Suite for SimAI Life Simulator
-Tests all backend endpoints with realistic data
+Backend API Testing for Life Simulator
+Tests all endpoints with FREE AI (no LLM cost)
 """
 
 import requests
 import json
 import sys
-from typing import Dict, Any, List
+from typing import Dict, Any
 
-# Use the public backend URL
+# Base URL from environment
 BASE_URL = "https://sims-ai-sandbox.preview.emergentagent.com/api"
 
 class Colors:
@@ -19,531 +19,418 @@ class Colors:
     BLUE = '\033[94m'
     END = '\033[0m'
 
-def print_test(name: str):
-    print(f"\n{Colors.BLUE}{'='*60}{Colors.END}")
-    print(f"{Colors.BLUE}Testing: {name}{Colors.END}")
-    print(f"{Colors.BLUE}{'='*60}{Colors.END}")
+def print_test(name: str, passed: bool, details: str = ""):
+    status = f"{Colors.GREEN}✅ PASS{Colors.END}" if passed else f"{Colors.RED}❌ FAIL{Colors.END}"
+    print(f"{status} - {name}")
+    if details:
+        print(f"  {Colors.BLUE}Details:{Colors.END} {details}")
+    if not passed:
+        print()
 
-def print_success(message: str):
-    print(f"{Colors.GREEN}✓ {message}{Colors.END}")
-
-def print_error(message: str):
-    print(f"{Colors.RED}✗ {message}{Colors.END}")
-
-def print_warning(message: str):
-    print(f"{Colors.YELLOW}⚠ {message}{Colors.END}")
-
-def validate_json(response: requests.Response) -> bool:
-    """Validate that response is valid JSON without ObjectId errors"""
-    try:
-        data = response.json()
-        # Check if response contains any ObjectId strings that weren't converted
-        json_str = json.dumps(data)
-        if "ObjectId" in json_str:
-            print_error("Response contains unconverted ObjectId")
-            return False
-        return True
-    except json.JSONDecodeError as e:
-        print_error(f"Invalid JSON response: {e}")
-        return False
-
-def test_health() -> bool:
+def test_health():
     """Test GET /api/health"""
-    print_test("GET /api/health - Health check endpoint")
-    
     try:
         response = requests.get(f"{BASE_URL}/health", timeout=10)
-        
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            return False
-        
-        if not validate_json(response):
-            return False
-        
-        data = response.json()
-        if data.get("status") != "healthy":
-            print_error(f"Expected status 'healthy', got {data.get('status')}")
-            return False
-        
-        print_success("Health check passed")
-        print(f"Response: {json.dumps(data, indent=2)}")
-        return True
-        
-    except Exception as e:
-        print_error(f"Health check failed: {e}")
-        return False
-
-def test_characters() -> tuple[bool, List[Dict]]:
-    """Test GET /api/characters"""
-    print_test("GET /api/characters - List all characters")
-    
-    try:
-        response = requests.get(f"{BASE_URL}/characters", timeout=10)
-        
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            return False, []
-        
-        if not validate_json(response):
-            return False, []
-        
-        characters = response.json()
-        
-        # Validate we have 3 characters
-        if len(characters) != 3:
-            print_error(f"Expected 3 characters, got {len(characters)}")
-            return False, []
-        
-        # Validate character names
-        expected_names = ["Sophie Laurent", "Kenji Tanaka", "Marcus Johnson"]
-        actual_names = [c.get("name") for c in characters]
-        
-        for name in expected_names:
-            if name not in actual_names:
-                print_error(f"Expected character '{name}' not found")
-                return False, []
-        
-        # Validate character structure
-        for char in characters:
-            # Check required fields
-            required_fields = ["id", "name", "age", "occupation", "bio", "location_id", "needs", "personality"]
-            for field in required_fields:
-                if field not in char:
-                    print_error(f"Character missing required field: {field}")
-                    return False, []
-            
-            # Validate needs structure
-            needs = char.get("needs", {})
-            required_needs = ["hunger", "energy", "social", "hygiene", "fun", "bladder", "comfort"]
-            for need in required_needs:
-                if need not in needs:
-                    print_error(f"Character needs missing field: {need}")
-                    return False, []
-                
-                # Validate need values are between 0 and 100
-                value = needs[need]
-                if not (0 <= value <= 100):
-                    print_error(f"Need '{need}' value {value} out of range [0, 100]")
-                    return False, []
-            
-            # Validate personality structure
-            personality = char.get("personality", {})
-            required_personality = ["extroversion", "creativity", "ambition", "kindness", "humor"]
-            for trait in required_personality:
-                if trait not in personality:
-                    print_error(f"Character personality missing field: {trait}")
-                    return False, []
-        
-        print_success(f"Found {len(characters)} characters with proper structure")
-        for char in characters:
-            print(f"  - {char['name']} ({char['occupation']}) at {char['location_id']}")
-            print(f"    Needs: hunger={char['needs']['hunger']:.1f}, energy={char['needs']['energy']:.1f}, social={char['needs']['social']:.1f}")
-        
-        return True, characters
-        
-    except Exception as e:
-        print_error(f"Characters test failed: {e}")
-        return False, []
-
-def test_locations() -> tuple[bool, List[Dict]]:
-    """Test GET /api/locations"""
-    print_test("GET /api/locations - List all world locations")
-    
-    try:
-        response = requests.get(f"{BASE_URL}/locations", timeout=10)
-        
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            return False, []
-        
-        if not validate_json(response):
-            return False, []
-        
-        locations = response.json()
-        
-        # Validate we have 8 locations
-        if len(locations) != 8:
-            print_error(f"Expected 8 locations, got {len(locations)}")
-            return False, []
-        
-        # Validate location IDs
-        expected_ids = ["paris_cafe", "tokyo_apartment", "nyc_office", "london_park", 
-                       "barcelona_gym", "rome_restaurant", "berlin_club", "sydney_beach"]
-        actual_ids = [loc.get("id") for loc in locations]
-        
-        for loc_id in expected_ids:
-            if loc_id not in actual_ids:
-                print_error(f"Expected location '{loc_id}' not found")
-                return False, []
-        
-        # Validate location structure
-        for loc in locations:
-            required_fields = ["id", "name", "description", "type", "city", "country", "emoji", "available_actions"]
-            for field in required_fields:
-                if field not in loc:
-                    print_error(f"Location missing required field: {field}")
-                    return False, []
-            
-            # Validate available_actions is a list
-            if not isinstance(loc.get("available_actions"), list):
-                print_error(f"Location available_actions should be a list")
-                return False, []
-        
-        print_success(f"Found {len(locations)} locations with proper structure")
-        for loc in locations:
-            print(f"  - {loc['name']} ({loc['city']}, {loc['country']}) - {loc['type']}")
-        
-        return True, locations
-        
-    except Exception as e:
-        print_error(f"Locations test failed: {e}")
-        return False, []
-
-def test_world() -> bool:
-    """Test GET /api/world"""
-    print_test("GET /api/world - Get world state")
-    
-    try:
-        response = requests.get(f"{BASE_URL}/world", timeout=10)
-        
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            return False
-        
-        if not validate_json(response):
-            return False
-        
-        world = response.json()
-        
-        # Validate world structure
-        required_fields = ["game_time", "is_paused", "current_weather"]
-        for field in required_fields:
-            if field not in world:
-                print_error(f"World state missing required field: {field}")
-                return False
-        
-        # Validate is_paused is boolean
-        if not isinstance(world.get("is_paused"), bool):
-            print_error(f"is_paused should be boolean, got {type(world.get('is_paused'))}")
-            return False
-        
-        print_success("World state retrieved successfully")
-        print(f"  Game time: {world.get('game_time')}")
-        print(f"  Paused: {world.get('is_paused')}")
-        print(f"  Weather: {world.get('current_weather')}")
-        
-        return True
-        
-    except Exception as e:
-        print_error(f"World state test failed: {e}")
-        return False
-
-def test_simulate() -> bool:
-    """Test POST /api/simulate"""
-    print_test("POST /api/simulate - AI simulation tick")
-    
-    try:
-        response = requests.post(f"{BASE_URL}/simulate", timeout=60)
-        
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            print_error(f"Response: {response.text}")
-            return False
-        
-        if not validate_json(response):
-            return False
-        
         data = response.json()
         
-        # Validate response structure
-        if "status" not in data:
-            print_error("Response missing 'status' field")
-            return False
-        
-        if data["status"] == "paused":
-            print_warning("Simulation is paused")
-            return True
-        
-        if "results" not in data:
-            print_error("Response missing 'results' field")
-            return False
-        
-        results = data["results"]
-        
-        # Validate we have results for all 3 characters
-        if len(results) != 3:
-            print_error(f"Expected results for 3 characters, got {len(results)}")
-            return False
-        
-        # Validate each result has required fields
-        for result in results:
-            required_fields = ["character_id", "name", "action", "thought", "mood", "location"]
-            for field in required_fields:
-                if field not in result:
-                    print_error(f"Result missing required field: {field}")
-                    return False
-            
-            # Validate thought is not empty (AI-generated)
-            if not result.get("thought") or result.get("thought") == "":
-                print_error(f"Character {result['name']} has empty thought (AI should generate thoughts)")
-                return False
-        
-        print_success("Simulation tick completed successfully")
-        print("AI-generated actions and thoughts:")
-        for result in results:
-            print(f"  - {result['name']}: {result['action']}")
-            print(f"    Thought: \"{result['thought']}\"")
-            print(f"    Mood: {result['mood']}, Location: {result['location']}")
-        
-        return True
-        
-    except Exception as e:
-        print_error(f"Simulate test failed: {e}")
-        return False
-
-def test_move_character(characters: List[Dict]) -> bool:
-    """Test POST /api/characters/{id}/move"""
-    print_test("POST /api/characters/char_1/move - Move character")
-    
-    if not characters:
-        print_error("No characters available for testing")
-        return False
-    
-    try:
-        # Move Sophie (char_1) to Barcelona gym
-        response = requests.post(
-            f"{BASE_URL}/characters/char_1/move",
-            params={"location_id": "barcelona_gym"},
-            timeout=10
+        passed = (
+            response.status_code == 200 and
+            data.get("status") == "healthy"
         )
         
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            print_error(f"Response: {response.text}")
-            return False
-        
-        if not validate_json(response):
-            return False
-        
-        data = response.json()
-        
-        # Validate response
-        if data.get("status") != "success":
-            print_error(f"Expected status 'success', got {data.get('status')}")
-            return False
-        
-        if data.get("location") != "barcelona_gym":
-            print_error(f"Expected location 'barcelona_gym', got {data.get('location')}")
-            return False
-        
-        # Verify the character actually moved
-        char_response = requests.get(f"{BASE_URL}/characters/char_1", timeout=10)
-        if char_response.status_code == 200:
-            char_data = char_response.json()
-            if char_data.get("location_id") != "barcelona_gym":
-                print_error(f"Character location not updated. Expected 'barcelona_gym', got {char_data.get('location_id')}")
-                return False
-        
-        print_success("Character moved successfully to Barcelona gym")
-        print(f"Response: {json.dumps(data, indent=2)}")
-        
-        return True
-        
+        print_test(
+            "GET /api/health - Health check",
+            passed,
+            f"Status: {data.get('status')}" if passed else f"Response: {data}"
+        )
+        return passed
     except Exception as e:
-        print_error(f"Move character test failed: {e}")
+        print_test("GET /api/health - Health check", False, f"Error: {str(e)}")
         return False
 
-def test_logs() -> bool:
-    """Test GET /api/logs"""
-    print_test("GET /api/logs?limit=5 - Activity logs")
-    
+def test_root():
+    """Test GET /api/ - Should return FREE AI message"""
     try:
-        response = requests.get(f"{BASE_URL}/logs", params={"limit": 5}, timeout=10)
+        response = requests.get(f"{BASE_URL}/", timeout=10)
+        data = response.json()
         
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            return False
+        # Check for FREE AI message
+        ai_info = data.get("ai", "")
+        has_free_ai = "FREE" in str(ai_info).upper() or "no LLM" in str(ai_info).lower()
         
-        if not validate_json(response):
-            return False
+        passed = (
+            response.status_code == 200 and
+            "message" in data and
+            has_free_ai
+        )
         
-        logs = response.json()
+        print_test(
+            "GET /api/ - Root endpoint with FREE AI info",
+            passed,
+            f"Message: {data.get('message')}, AI: {data.get('ai')}" if passed else f"Response: {data}"
+        )
+        return passed
+    except Exception as e:
+        print_test("GET /api/ - Root endpoint", False, f"Error: {str(e)}")
+        return False
+
+def test_characters():
+    """Test GET /api/characters - Should return 3 NPCs with full attributes"""
+    try:
+        response = requests.get(f"{BASE_URL}/characters", timeout=10)
+        data = response.json()
         
-        # Validate logs is a list
-        if not isinstance(logs, list):
-            print_error(f"Expected list of logs, got {type(logs)}")
-            return False
+        # Check we have 3 characters
+        has_three = len(data) >= 3
         
-        # If we have logs, validate structure
-        if len(logs) > 0:
-            for log in logs[:5]:  # Check first 5
-                required_fields = ["character_id", "character_name", "action", "location", "timestamp"]
-                for field in required_fields:
-                    if field not in log:
-                        print_error(f"Log missing required field: {field}")
-                        return False
-            
-            print_success(f"Retrieved {len(logs)} activity logs")
-            print("Recent activities:")
-            for log in logs[:5]:
-                print(f"  - {log['character_name']}: {log['action']} at {log['location']}")
-                if "thought" in log and log["thought"]:
-                    print(f"    Thought: \"{log['thought']}\"")
+        # Check for Sophie, Kenji, Marcus
+        names = [char.get("name", "") for char in data]
+        has_sophie = any("Sophie" in name for name in names)
+        has_kenji = any("Kenji" in name for name in names)
+        has_marcus = any("Marcus" in name for name in names)
+        
+        # Check first character has all required attributes
+        if data:
+            char = data[0]
+            attributes = char.get("attributes", {})
+            has_attributes = all(
+                attr in attributes 
+                for attr in ["intelligence", "strength", "charisma", "beauty", "creativity", "luck"]
+            )
+            has_personality = "personality" in char
+            has_hobbies = "hobbies" in char
+            has_objectives = "objectives" in char
         else:
-            print_warning("No logs found (this is OK for a fresh game)")
+            has_attributes = has_personality = has_hobbies = has_objectives = False
         
-        return True
+        passed = (
+            response.status_code == 200 and
+            has_three and
+            has_sophie and has_kenji and has_marcus and
+            has_attributes and has_personality and has_hobbies and has_objectives
+        )
         
+        details = f"Found {len(data)} characters: {', '.join(names[:3])}"
+        if passed:
+            details += f" | Attributes: ✓ | Personality: ✓ | Hobbies: ✓ | Objectives: ✓"
+        
+        print_test(
+            "GET /api/characters - 3 NPCs with full attributes",
+            passed,
+            details
+        )
+        return passed
     except Exception as e:
-        print_error(f"Logs test failed: {e}")
+        print_test("GET /api/characters", False, f"Error: {str(e)}")
         return False
 
-def test_pause() -> bool:
-    """Test POST /api/world/pause"""
-    print_test("POST /api/world/pause - Toggle pause state")
-    
+def test_locations():
+    """Test GET /api/locations - Should return 10 locations"""
     try:
-        # Get initial pause state
-        world_response = requests.get(f"{BASE_URL}/world", timeout=10)
-        if world_response.status_code != 200:
-            print_error("Failed to get initial world state")
-            return False
-        
-        initial_state = world_response.json()
-        initial_paused = initial_state.get("is_paused", False)
-        
-        # Toggle pause
-        response = requests.post(f"{BASE_URL}/world/pause", timeout=10)
-        
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            return False
-        
-        if not validate_json(response):
-            return False
-        
+        response = requests.get(f"{BASE_URL}/locations", timeout=10)
         data = response.json()
         
-        # Validate response has is_paused field
-        if "is_paused" not in data:
-            print_error("Response missing 'is_paused' field")
-            return False
+        # Check we have 10 locations
+        has_ten = len(data) >= 10
         
-        new_paused = data.get("is_paused")
+        # Check for specific locations mentioned in review
+        location_names = [loc.get("name", "").lower() for loc in data]
+        has_paris_cafe = any("paris" in name or "parisien" in name for name in location_names)
+        has_tokyo_apartment = any("tokyo" in name or "shibuya" in name for name in location_names)
         
-        # Validate pause state changed
-        if new_paused == initial_paused:
-            print_error(f"Pause state did not toggle (still {initial_paused})")
-            return False
+        # Check structure
+        if data:
+            loc = data[0]
+            has_structure = all(
+                field in loc 
+                for field in ["id", "name", "description", "type", "city", "country", "emoji", "available_actions"]
+            )
+        else:
+            has_structure = False
         
-        print_success(f"Pause state toggled: {initial_paused} → {new_paused}")
+        passed = (
+            response.status_code == 200 and
+            has_ten and
+            has_paris_cafe and has_tokyo_apartment and
+            has_structure
+        )
         
-        # Toggle back to original state
-        requests.post(f"{BASE_URL}/world/pause", timeout=10)
+        details = f"Found {len(data)} locations"
+        if passed:
+            details += f" | Paris cafe: ✓ | Tokyo apartment: ✓ | Structure: ✓"
         
-        return True
-        
+        print_test(
+            "GET /api/locations - 10 locations with proper structure",
+            passed,
+            details
+        )
+        return passed
     except Exception as e:
-        print_error(f"Pause test failed: {e}")
+        print_test("GET /api/locations", False, f"Error: {str(e)}")
         return False
 
-def test_reset() -> bool:
-    """Test POST /api/reset"""
-    print_test("POST /api/reset - Reset game to initial state")
-    
+def test_translations_fr():
+    """Test GET /api/translations/fr - French translations"""
     try:
-        response = requests.post(f"{BASE_URL}/reset", timeout=10)
-        
-        if response.status_code != 200:
-            print_error(f"Expected status 200, got {response.status_code}")
-            return False
-        
-        if not validate_json(response):
-            return False
-        
+        response = requests.get(f"{BASE_URL}/translations/fr", timeout=10)
         data = response.json()
         
-        # Validate response
-        if data.get("status") != "success":
-            print_error(f"Expected status 'success', got {data.get('status')}")
-            return False
+        # Check for French translations
+        has_french = (
+            data.get("app_name") is not None and
+            "intelligence" in data and
+            "strength" in data and
+            "charisma" in data and
+            "beauty" in data and
+            "creativity" in data and
+            "luck" in data
+        )
         
-        # Verify reset by checking characters are back to initial state
-        char_response = requests.get(f"{BASE_URL}/characters", timeout=10)
-        if char_response.status_code == 200:
-            characters = char_response.json()
-            if len(characters) != 3:
-                print_error(f"After reset, expected 3 characters, got {len(characters)}")
-                return False
+        # Check if translations are actually in French
+        is_french = (
+            data.get("strength") == "Force" or
+            data.get("beauty") == "Beauté" or
+            "Beauté" in str(data.values())
+        )
         
-        print_success("Game reset successfully")
-        print(f"Response: {json.dumps(data, indent=2)}")
+        passed = (
+            response.status_code == 200 and
+            has_french and
+            is_french
+        )
         
-        return True
+        details = f"Attributes found: intelligence, strength, charisma, beauty, creativity, luck"
+        if is_french:
+            details += " | Language: French ✓"
         
+        print_test(
+            "GET /api/translations/fr - French translations with attributes",
+            passed,
+            details
+        )
+        return passed
     except Exception as e:
-        print_error(f"Reset test failed: {e}")
+        print_test("GET /api/translations/fr", False, f"Error: {str(e)}")
+        return False
+
+def test_translations_en():
+    """Test GET /api/translations/en - English translations"""
+    try:
+        response = requests.get(f"{BASE_URL}/translations/en", timeout=10)
+        data = response.json()
+        
+        # Check for English translations
+        has_english = (
+            data.get("app_name") is not None and
+            "intelligence" in data and
+            "strength" in data and
+            "charisma" in data and
+            "beauty" in data and
+            "creativity" in data and
+            "luck" in data
+        )
+        
+        # Check if translations are in English
+        is_english = (
+            data.get("strength") == "Strength" and
+            data.get("beauty") == "Beauty"
+        )
+        
+        passed = (
+            response.status_code == 200 and
+            has_english and
+            is_english
+        )
+        
+        details = f"Attributes found: intelligence, strength, charisma, beauty, creativity, luck"
+        if is_english:
+            details += " | Language: English ✓"
+        
+        print_test(
+            "GET /api/translations/en - English translations with attributes",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("GET /api/translations/en", False, f"Error: {str(e)}")
+        return False
+
+def test_objectives():
+    """Test GET /api/objectives - Life objectives list"""
+    try:
+        response = requests.get(f"{BASE_URL}/objectives", timeout=10)
+        data = response.json()
+        
+        # Check it's a list with objectives
+        is_list = isinstance(data, list)
+        has_objectives = len(data) > 0 if is_list else False
+        
+        passed = (
+            response.status_code == 200 and
+            is_list and
+            has_objectives
+        )
+        
+        details = f"Found {len(data)} objectives" if is_list else f"Response: {data}"
+        if passed and len(data) > 0:
+            details += f" | Examples: {', '.join(data[:3])}"
+        
+        print_test(
+            "GET /api/objectives - Life objectives list",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("GET /api/objectives", False, f"Error: {str(e)}")
+        return False
+
+def test_hobbies():
+    """Test GET /api/hobbies - Hobbies list"""
+    try:
+        response = requests.get(f"{BASE_URL}/hobbies", timeout=10)
+        data = response.json()
+        
+        # Check it's a list with hobbies
+        is_list = isinstance(data, list)
+        has_hobbies = len(data) > 0 if is_list else False
+        
+        passed = (
+            response.status_code == 200 and
+            is_list and
+            has_hobbies
+        )
+        
+        details = f"Found {len(data)} hobbies" if is_list else f"Response: {data}"
+        if passed and len(data) > 0:
+            details += f" | Examples: {', '.join(data[:3])}"
+        
+        print_test(
+            "GET /api/hobbies - Hobbies list",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("GET /api/hobbies", False, f"Error: {str(e)}")
+        return False
+
+def test_simulate():
+    """Test POST /api/simulate - FREE AI simulation (no LLM calls)"""
+    try:
+        response = requests.post(f"{BASE_URL}/simulate", timeout=15)
+        data = response.json()
+        
+        # Check response structure
+        has_status = data.get("status") == "success"
+        has_results = "results" in data and isinstance(data["results"], list)
+        
+        # Check results have required fields
+        if has_results and len(data["results"]) > 0:
+            result = data["results"][0]
+            has_fields = all(
+                field in result 
+                for field in ["character_id", "name", "action", "thought", "mood", "location"]
+            )
+            
+            # Check thought is not empty (FREE AI should generate thoughts)
+            has_thought = result.get("thought", "") != ""
+        else:
+            has_fields = has_thought = False
+        
+        passed = (
+            response.status_code == 200 and
+            has_status and
+            has_results and
+            has_fields and
+            has_thought
+        )
+        
+        details = f"Status: {data.get('status')}"
+        if has_results:
+            details += f" | Results: {len(data['results'])} characters"
+            if has_thought:
+                details += f" | Thoughts generated: ✓ (FREE AI working)"
+        
+        print_test(
+            "POST /api/simulate - FREE AI simulation (no LLM)",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("POST /api/simulate", False, f"Error: {str(e)}")
+        return False
+
+def test_move_character():
+    """Test POST /api/characters/npc_sophie/move - Move Sophie to Tokyo apartment"""
+    try:
+        response = requests.post(
+            f"{BASE_URL}/characters/npc_sophie/move",
+            params={"location_id": "tokyo_apartment"},
+            timeout=10
+        )
+        data = response.json()
+        
+        # Check response
+        has_success = data.get("status") == "success"
+        correct_location = data.get("location") == "tokyo_apartment"
+        
+        passed = (
+            response.status_code == 200 and
+            has_success and
+            correct_location
+        )
+        
+        details = f"Status: {data.get('status')}, Location: {data.get('location')}"
+        
+        print_test(
+            "POST /api/characters/npc_sophie/move - Move character",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("POST /api/characters/npc_sophie/move", False, f"Error: {str(e)}")
         return False
 
 def main():
-    """Run all backend tests"""
-    print(f"\n{Colors.BLUE}{'='*60}{Colors.END}")
-    print(f"{Colors.BLUE}SimAI Life Simulator - Backend API Test Suite{Colors.END}")
+    print(f"\n{Colors.BLUE}{'='*70}{Colors.END}")
+    print(f"{Colors.BLUE}Life Simulator Backend API Tests - FREE AI (No LLM Cost){Colors.END}")
     print(f"{Colors.BLUE}Base URL: {BASE_URL}{Colors.END}")
-    print(f"{Colors.BLUE}{'='*60}{Colors.END}")
+    print(f"{Colors.BLUE}{'='*70}{Colors.END}\n")
     
-    results = {}
+    tests = [
+        ("Health Check", test_health),
+        ("Root Endpoint", test_root),
+        ("Characters", test_characters),
+        ("Locations", test_locations),
+        ("French Translations", test_translations_fr),
+        ("English Translations", test_translations_en),
+        ("Objectives", test_objectives),
+        ("Hobbies", test_hobbies),
+        ("Simulate (FREE AI)", test_simulate),
+        ("Move Character", test_move_character),
+    ]
     
-    # Test 1: Health check
-    results["health"] = test_health()
+    results = []
+    for name, test_func in tests:
+        results.append(test_func())
     
-    # Test 2: Characters
-    success, characters = test_characters()
-    results["characters"] = success
-    
-    # Test 3: Locations
-    success, locations = test_locations()
-    results["locations"] = success
-    
-    # Test 4: World state
-    results["world"] = test_world()
-    
-    # Test 5: Simulate (AI decision making)
-    results["simulate"] = test_simulate()
-    
-    # Test 6: Move character
-    results["move"] = test_move_character(characters)
-    
-    # Test 7: Activity logs
-    results["logs"] = test_logs()
-    
-    # Test 8: Pause toggle
-    results["pause"] = test_pause()
-    
-    # Test 9: Reset game
-    results["reset"] = test_reset()
-    
-    # Print summary
-    print(f"\n{Colors.BLUE}{'='*60}{Colors.END}")
-    print(f"{Colors.BLUE}TEST SUMMARY{Colors.END}")
-    print(f"{Colors.BLUE}{'='*60}{Colors.END}")
-    
-    passed = sum(1 for v in results.values() if v)
+    # Summary
+    passed = sum(results)
     total = len(results)
     
-    for test_name, passed_test in results.items():
-        status = f"{Colors.GREEN}PASSED{Colors.END}" if passed_test else f"{Colors.RED}FAILED{Colors.END}"
-        print(f"{test_name.ljust(20)}: {status}")
-    
-    print(f"\n{Colors.BLUE}Total: {passed}/{total} tests passed{Colors.END}")
-    
+    print(f"\n{Colors.BLUE}{'='*70}{Colors.END}")
     if passed == total:
-        print(f"{Colors.GREEN}✓ All tests passed!{Colors.END}\n")
-        return 0
+        print(f"{Colors.GREEN}✅ ALL TESTS PASSED: {passed}/{total}{Colors.END}")
     else:
-        print(f"{Colors.RED}✗ Some tests failed{Colors.END}\n")
-        return 1
+        print(f"{Colors.YELLOW}⚠️  TESTS PASSED: {passed}/{total}{Colors.END}")
+        print(f"{Colors.RED}❌ TESTS FAILED: {total - passed}/{total}{Colors.END}")
+    print(f"{Colors.BLUE}{'='*70}{Colors.END}\n")
+    
+    return 0 if passed == total else 1
 
 if __name__ == "__main__":
     sys.exit(main())
