@@ -24,6 +24,7 @@ import { BuildModeModal } from '../src/components/BuildModeModal';
 import { PremiumModal } from '../src/components/PremiumModal';
 import { Scene3D } from '../src/components/Scene3D';
 import { HaveBabyModal } from '../src/components/HaveBabyModal';
+import { KawaiiScene } from '../src/components/KawaiiScene';
 
 // Map character actions → overlay emoji shown next to them
 const ACTION_ICONS: Record<string, string> = {
@@ -621,7 +622,7 @@ export default function LifeSimulator() {
   const [showPremium, setShowPremium] = useState(false);
   const [showHaveBaby, setShowHaveBaby] = useState(false);
   const [babyParent, setBabyParent] = useState<Character | null>(null);
-  const [view3D, setView3D] = useState(true);
+  const [view3D, setView3D] = useState(false); // Default to Kawaii 2D scene
   const [gameHour, setGameHour] = useState(12); // start at noon for bright first view
   const [isPremium] = useState(false); // TODO: wire to auth user
 
@@ -746,7 +747,7 @@ export default function LifeSimulator() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#00D4FF" />}
       >
-        {/* 2D Isometric or 3D World */}
+        {/* Kawaii 2D Scene (default) or 3D World */}
         {view3D ? (
           <Scene3D
             characters={(currentLocation ? characters.filter(c => c.location_id === currentLocation.id) : []) as any}
@@ -757,23 +758,23 @@ export default function LifeSimulator() {
             onCharacterClick={setSelectedCharacter}
           />
         ) : (
-          <IsometricWorld
-            characters={characters}
-            location={currentLocation || null}
+          <KawaiiScene
+            characters={(currentLocation ? characters.filter(c => c.location_id === currentLocation.id) : []) as any}
+            location={(currentLocation as any) || null}
+            buildings={currentLocationId === 'my_home' ? buildings : []}
+            gameHour={gameHour}
             onCharacterPress={setSelectedCharacter}
             onLocationChange={() => setShowLocationPicker(true)}
-            gameHour={gameHour}
-            buildings={currentLocationId === 'my_home' ? buildings : []}
           />
         )}
 
         {/* 2D/3D toggle row */}
         <View style={styles.viewToggleRow}>
           <TouchableOpacity style={[styles.viewToggleBtn, !view3D && styles.viewToggleBtnActive]} onPress={() => setView3D(false)}>
-            <Text style={styles.viewToggleText}>🗺️ 2D Isometric</Text>
+            <Text style={styles.viewToggleText}>🌸 Kawaii</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.viewToggleBtn, view3D && styles.viewToggleBtnActive]} onPress={() => setView3D(true)}>
-            <Text style={styles.viewToggleText}>🎮 3D View</Text>
+            <Text style={styles.viewToggleText}>🎮 3D</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.travelChipBtn} onPress={() => setShowLocationPicker(true)}>
             <Ionicons name="airplane" size={14} color="#FFF" />
