@@ -14,6 +14,7 @@ import json
 import bcrypt
 import jwt
 import httpx
+import stripe
 from bson import ObjectId
 
 ROOT_DIR = Path(__file__).parent
@@ -25,6 +26,10 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'life_simulator')]
 
 JWT_SECRET = os.environ.get('JWT_SECRET', 'default_secret_change_me')
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+
+# Initialize Stripe
+stripe.api_key = STRIPE_SECRET_KEY
 
 # Create the main app
 app = FastAPI(title="Life - Simulateur de Vie")
@@ -1098,6 +1103,171 @@ async def reset_game():
     
     await db.world_state.insert_one(WorldState().model_dump())
     return {"status": "success", "message": "Game reset!"}
+
+# ==================== STRIPE PAYMENT ROUTES ====================
+
+class SubscriptionRequest(BaseModel):
+    price_id: str = "price_premium_monthly"  # Default premium price
+
+# Premium pricing
+PREMIUM_PRICES = {
+    "monthly": {"amount": 499, "currency": "usd", "interval": "month", "name": "Premium Monthly"},
+    "yearly": {"amount": 3999, "currency": "usd", "interval": "year", "name": "Premium Yearly"}
+}
+
+@api_router.get("/stripe/prices")
+async def get_stripe_prices():
+    """Get available subscription prices"""
+    return {
+        "prices": [
+            {"id": "monthly", "name": "Premium Monthly", "amount": 4.99, "currency": "USD", "interval": "month"},
+            {"id": "yearly", "name": "Premium Yearly", "amount": 39.99, "currency": "USD", "interval": "year", "savings": "33%"}
+        ]
+    }
+
+@api_router.post("/stripe/create-checkout-session")
+async def create_checkout_session(plan: str = "monthly", user: dict = Depends(get_current_user)):
+    """Create a Stripe Checkout session for subscription"""
+    if not user:
+        raise HTTPException(status_code=401, detail="Must be logged in")
+    
+    if not STRIPE_SECRET_KEY:
+        raise HTTPException(status_code=500, detail="Stripe not configured")
+    
+    try:
+        price_info = PREMIUM_PRICES.get(plan, PREMIUM_PRICES["monthly"])
+        
+        # Create or get Stripe customer
+        customer_id = user.get("stripe_customer_id")
+        if not customer_id:
+            customer = stripe.Customer.create(
+                email=user["email"],
+                name=user.get("name", ""),
+                metadata={"user_id": user["id"]}
+            )
+            customer_id = customer.id
+            await db.users.update_one({"id": user["id"]}, {"$set": {"stripe_customer_id": customer_id}})
+        
+        # Create checkout session
+        checkout_session = stripe.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=["card"],
+            mode="subscription",
+            line_items=[{
+                "price_data": {
+                    "currency": price_info["currency"],
+                    "unit_amount": price_info["amount"],
+                    "recurring": {"interval": price_info["interval"]},
+                    "product_data": {"name": f"Life Premium - {price_info['name']}"}
+                },
+                "quantity": 1
+            }],
+            success_url=os.environ.get("FRONTEND_URL", "https://example.com") + "/?subscription=success",
+            cancel_url=os.environ.get("FRONTEND_URL", "https://example.com") + "/?subscription=cancelled",
+            metadata={"user_id": user["id"], "plan": plan}
+        )
+        
+        return {"checkout_url": checkout_session.url, "session_id": checkout_session.id}
+    
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Payment error: {e}")
+        raise HTTPException(status_code=500, detail="Payment processing failed")
+
+@api_router.post("/stripe/webhook")
+async def stripe_webhook(request):
+    """Handle Stripe webhooks for subscription events"""
+    try:
+        payload = await request.body()
+        sig_header = request.headers.get("stripe-signature")
+        
+        # In production, verify webhook signature with endpoint secret
+        # event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
+        
+        event = json.loads(payload)
+        event_type = event.get("type", "")
+        
+        if event_type == "checkout.session.completed":
+            session = event["data"]["object"]
+            user_id = session.get("metadata", {}).get("user_id")
+            if user_id:
+                await db.users.update_one(
+                    {"id": user_id},
+                    {"$set": {
+                        "is_premium": True,
+                        "premium_until": datetime.now(timezone.utc) + timedelta(days=30),
+                        "stripe_subscription_id": session.get("subscription")
+                    }}
+                )
+                logger.info(f"User {user_id} upgraded to premium")
+        
+        elif event_type == "customer.subscription.deleted":
+            subscription = event["data"]["object"]
+            customer_id = subscription.get("customer")
+            user = await db.users.find_one({"stripe_customer_id": customer_id})
+            if user:
+                await db.users.update_one(
+                    {"id": user["id"]},
+                    {"$set": {"is_premium": False, "premium_until": None}}
+                )
+                logger.info(f"User {user['id']} subscription cancelled")
+        
+        return {"status": "success"}
+    
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        raise HTTPException(status_code=400, detail="Webhook processing failed")
+
+@api_router.get("/stripe/subscription-status")
+async def get_subscription_status(user: dict = Depends(get_current_user)):
+    """Get user's subscription status"""
+    if not user:
+        return {"is_premium": False, "subscription": None}
+    
+    return {
+        "is_premium": user.get("is_premium", False),
+        "premium_until": user.get("premium_until"),
+        "stripe_customer_id": user.get("stripe_customer_id"),
+        "subscription_id": user.get("stripe_subscription_id")
+    }
+
+@api_router.post("/stripe/cancel-subscription")
+async def cancel_subscription(user: dict = Depends(get_current_user)):
+    """Cancel user's subscription"""
+    if not user:
+        raise HTTPException(status_code=401, detail="Must be logged in")
+    
+    subscription_id = user.get("stripe_subscription_id")
+    if not subscription_id:
+        raise HTTPException(status_code=400, detail="No active subscription")
+    
+    try:
+        stripe.Subscription.delete(subscription_id)
+        await db.users.update_one(
+            {"id": user["id"]},
+            {"$set": {"is_premium": False, "premium_until": None, "stripe_subscription_id": None}}
+        )
+        return {"status": "cancelled", "message": "Subscription cancelled successfully"}
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# Mock payment for testing without real Stripe
+@api_router.post("/stripe/mock-subscribe")
+async def mock_subscribe(user: dict = Depends(get_current_user)):
+    """Mock subscription for testing (activates premium for 30 days)"""
+    if not user:
+        raise HTTPException(status_code=401, detail="Must be logged in")
+    
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {
+            "is_premium": True,
+            "premium_until": datetime.now(timezone.utc) + timedelta(days=30)
+        }}
+    )
+    return {"status": "success", "message": "Premium activated for 30 days (mock)"}
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])

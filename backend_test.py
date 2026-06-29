@@ -363,19 +363,127 @@ def test_simulate():
         print_test("POST /api/simulate", False, f"Error: {str(e)}")
         return False
 
+def test_stripe_prices():
+    """Test GET /api/stripe/prices - Should return monthly and yearly pricing"""
+    try:
+        response = requests.get(f"{BASE_URL}/stripe/prices", timeout=10)
+        data = response.json()
+        
+        # Check response structure
+        has_prices = "prices" in data and isinstance(data["prices"], list)
+        
+        if has_prices:
+            prices = data["prices"]
+            # Find monthly and yearly plans
+            monthly = next((p for p in prices if p.get("interval") == "month"), None)
+            yearly = next((p for p in prices if p.get("interval") == "year"), None)
+            
+            has_monthly = monthly is not None and monthly.get("amount") == 4.99
+            has_yearly = yearly is not None and yearly.get("amount") == 39.99
+            
+            # Check structure
+            if monthly:
+                has_structure = all(
+                    field in monthly 
+                    for field in ["id", "name", "amount", "currency", "interval"]
+                )
+            else:
+                has_structure = False
+        else:
+            has_monthly = has_yearly = has_structure = False
+        
+        passed = (
+            response.status_code == 200 and
+            has_prices and
+            has_monthly and
+            has_yearly and
+            has_structure
+        )
+        
+        details = ""
+        if has_monthly:
+            details += f"Monthly: ${monthly['amount']} USD"
+        if has_yearly:
+            details += f" | Yearly: ${yearly['amount']} USD"
+        if passed:
+            details += " | Structure: ✓"
+        
+        print_test(
+            "GET /api/stripe/prices - Stripe pricing",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("GET /api/stripe/prices", False, f"Error: {str(e)}")
+        return False
+
+def test_stripe_subscription_status():
+    """Test GET /api/stripe/subscription-status - Should return subscription status"""
+    try:
+        response = requests.get(f"{BASE_URL}/stripe/subscription-status", timeout=10)
+        data = response.json()
+        
+        # Check response structure (without auth, should return default status)
+        has_is_premium = "is_premium" in data
+        has_subscription = "subscription" in data or "subscription_id" in data
+        
+        passed = (
+            response.status_code == 200 and
+            has_is_premium
+        )
+        
+        details = f"is_premium: {data.get('is_premium')}"
+        if "premium_until" in data:
+            details += f" | premium_until: {data.get('premium_until')}"
+        
+        print_test(
+            "GET /api/stripe/subscription-status - Subscription status",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("GET /api/stripe/subscription-status", False, f"Error: {str(e)}")
+        return False
+
+def test_stripe_mock_subscribe_no_auth():
+    """Test POST /api/stripe/mock-subscribe - Should return 401 without auth"""
+    try:
+        response = requests.post(f"{BASE_URL}/stripe/mock-subscribe", timeout=10)
+        
+        # Should return 401 Unauthorized without authentication
+        passed = response.status_code == 401
+        
+        details = f"Status code: {response.status_code}"
+        if passed:
+            details += " | Auth required: ✓"
+        else:
+            details += f" | Expected 401, got {response.status_code}"
+        
+        print_test(
+            "POST /api/stripe/mock-subscribe - Auth required (401)",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("POST /api/stripe/mock-subscribe", False, f"Error: {str(e)}")
+        return False
+
 def test_move_character():
-    """Test POST /api/characters/npc_sophie/move - Move Sophie to Tokyo apartment"""
+    """Test POST /api/characters/npc_sophie/move - Move Sophie to Sydney Beach"""
     try:
         response = requests.post(
             f"{BASE_URL}/characters/npc_sophie/move",
-            params={"location_id": "tokyo_apartment"},
+            params={"location_id": "sydney_beach"},
             timeout=10
         )
         data = response.json()
         
         # Check response
         has_success = data.get("status") == "success"
-        correct_location = data.get("location") == "tokyo_apartment"
+        correct_location = data.get("location") == "sydney_beach"
         
         passed = (
             response.status_code == 200 and
@@ -386,7 +494,7 @@ def test_move_character():
         details = f"Status: {data.get('status')}, Location: {data.get('location')}"
         
         print_test(
-            "POST /api/characters/npc_sophie/move - Move character",
+            "POST /api/characters/npc_sophie/move - Move Sophie to Sydney",
             passed,
             details
         )
@@ -395,23 +503,66 @@ def test_move_character():
         print_test("POST /api/characters/npc_sophie/move", False, f"Error: {str(e)}")
         return False
 
+def test_verify_character_location():
+    """Test GET /api/characters - Verify Sophie is at sydney_beach"""
+    try:
+        response = requests.get(f"{BASE_URL}/characters", timeout=10)
+        data = response.json()
+        
+        # Find Sophie
+        sophie = next((char for char in data if "sophie" in char.get("name", "").lower()), None)
+        
+        if sophie:
+            location_id = sophie.get("location_id")
+            at_sydney = location_id == "sydney_beach"
+        else:
+            at_sydney = False
+        
+        passed = (
+            response.status_code == 200 and
+            sophie is not None and
+            at_sydney
+        )
+        
+        details = ""
+        if sophie:
+            details = f"Sophie's location: {sophie.get('location_id')}"
+            if at_sydney:
+                details += " ✓"
+        else:
+            details = "Sophie not found"
+        
+        print_test(
+            "GET /api/characters - Verify Sophie at sydney_beach",
+            passed,
+            details
+        )
+        return passed
+    except Exception as e:
+        print_test("GET /api/characters - Verify location", False, f"Error: {str(e)}")
+        return False
+
 def main():
     print(f"\n{Colors.BLUE}{'='*70}{Colors.END}")
-    print(f"{Colors.BLUE}Life Simulator Backend API Tests - FREE AI (No LLM Cost){Colors.END}")
+    print(f"{Colors.BLUE}Life Simulator Backend API Tests - FREE AI + Stripe{Colors.END}")
     print(f"{Colors.BLUE}Base URL: {BASE_URL}{Colors.END}")
     print(f"{Colors.BLUE}{'='*70}{Colors.END}\n")
     
     tests = [
         ("Health Check", test_health),
         ("Root Endpoint", test_root),
+        ("Simulate (FREE AI)", test_simulate),
+        ("Stripe Prices", test_stripe_prices),
+        ("Stripe Subscription Status", test_stripe_subscription_status),
+        ("Stripe Mock Subscribe (No Auth)", test_stripe_mock_subscribe_no_auth),
+        ("Move Character to Sydney", test_move_character),
+        ("Verify Character Location", test_verify_character_location),
         ("Characters", test_characters),
         ("Locations", test_locations),
         ("French Translations", test_translations_fr),
         ("English Translations", test_translations_en),
         ("Objectives", test_objectives),
         ("Hobbies", test_hobbies),
-        ("Simulate (FREE AI)", test_simulate),
-        ("Move Character", test_move_character),
     ]
     
     results = []
