@@ -1444,9 +1444,9 @@ async def get_user_buildings(user: dict = Depends(get_current_user), location_id
 async def place_building_item(payload: Dict, user: dict = Depends(get_current_user)):
     """Place an item from the catalog onto the user's grid."""
     catalog_id = payload.get("catalog_id")
-    x = float(payload.get("x", 50))
-    y = float(payload.get("y", 50))
-    location_id = payload.get("location_id", "my_home")
+    x = float(payload.get("x") or 50)
+    y = float(payload.get("y") or 50)
+    location_id = payload.get("location_id") or "my_home"
     
     catalog_item = next((c for c in BUILD_CATALOG if c["id"] == catalog_id), None)
     if not catalog_item:

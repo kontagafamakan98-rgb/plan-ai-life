@@ -1,11 +1,23 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 
 const API_BASE = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+
+// Cross-platform alert that works on Web (where react-native Alert is silent)
+const showAlert = (title: string, message?: string) => {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.alert(message ? `${title}\n\n${message}` : title);
+  } else {
+    // Lazy import to avoid breaking SSR
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Alert } = require('react-native');
+    Alert.alert(title, message);
+  }
+};
 
 const SKIN_COLORS = ['#F5D0C5', '#E8B89B', '#D2A07A', '#A07857', '#7C5238', '#4A2E1C'];
 const HAIR_COLORS = ['#1A1A1A', '#3D2817', '#6B4226', '#A0522D', '#D4A574', '#E8C547', '#FF6B35', '#9B59B6', '#FFFFFF'];
@@ -65,7 +77,7 @@ export const CharacterCreatorModal: React.FC<Props> = ({ visible, onClose, onCre
   };
 
   const handleCreate = async () => {
-    if (!name.trim()) { Alert.alert('Name required', 'Please enter a name'); return; }
+    if (!name.trim()) { showAlert('Name required', 'Please enter a name for your character'); return; }
     setCreating(true);
     try {
       const res = await axios.post(`${API_BASE}/api/characters/create`, {
@@ -80,7 +92,9 @@ export const CharacterCreatorModal: React.FC<Props> = ({ visible, onClose, onCre
       reset();
       onClose();
     } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.detail || 'Failed to create character');
+      const msg = e?.response?.data?.detail || e?.message || 'Failed to create character';
+      console.error('Character creation error:', e?.response?.data || e);
+      showAlert('Error', typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally { setCreating(false); }
   };
 

@@ -146,13 +146,29 @@ const WalkingCharacter: React.FC<{
         {/* Shadow */}
         <View style={styles.characterShadow} />
         
-        {/* Character Body */}
-        <View style={[styles.characterBody, { backgroundColor: character.appearance?.skin_color || '#F5D0C5' }]}>
-          {/* Hair */}
-          <View style={[styles.characterHair, { backgroundColor: character.appearance?.hair_color || '#4A3728' }]} />
-          
-          {/* Face */}
-          <Text style={styles.characterFaceEmoji}>{character.avatar_emoji}</Text>
+        {/* Chibi character sprite */}
+        <View style={styles.chibiWrap}>
+          {/* Hair back layer */}
+          <View style={[styles.chibiHairBack, { backgroundColor: character.appearance?.hair_color || '#4A3728' }]} />
+          {/* Round head with skin color */}
+          <View style={[styles.chibiHead, { backgroundColor: character.appearance?.skin_color || '#F5D0C5' }]}>
+            {/* Hair top cap */}
+            <View style={[styles.chibiHairTop, { backgroundColor: character.appearance?.hair_color || '#4A3728' }]} />
+            {/* Big chibi eyes */}
+            <View style={styles.chibiEyesRow}>
+              <View style={styles.chibiEye} />
+              <View style={styles.chibiEye} />
+            </View>
+            {/* Pink cheeks */}
+            <View style={styles.chibiCheeksRow}>
+              <View style={styles.chibiCheek} />
+              <View style={styles.chibiCheek} />
+            </View>
+            {/* Smile */}
+            <View style={styles.chibiSmile} />
+          </View>
+          {/* Small body torso */}
+          <View style={[styles.chibiBody, { backgroundColor: moodColors[character.mood] || '#4CAF50' }]} />
         </View>
         
         {/* Mood indicator */}
@@ -747,7 +763,7 @@ export default function LifeSimulator() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#00D4FF" />}
       >
-        {/* Kawaii 2D Scene (default) or 3D World */}
+        {/* Rich Isometric scene (default) or 3D World */}
         {view3D ? (
           <Scene3D
             characters={(currentLocation ? characters.filter(c => c.location_id === currentLocation.id) : []) as any}
@@ -758,20 +774,20 @@ export default function LifeSimulator() {
             onCharacterClick={setSelectedCharacter}
           />
         ) : (
-          <KawaiiScene
-            characters={(currentLocation ? characters.filter(c => c.location_id === currentLocation.id) : []) as any}
-            location={(currentLocation as any) || null}
-            buildings={currentLocationId === 'my_home' ? buildings : []}
-            gameHour={gameHour}
+          <IsometricWorld
+            characters={characters}
+            location={currentLocation || null}
             onCharacterPress={setSelectedCharacter}
             onLocationChange={() => setShowLocationPicker(true)}
+            gameHour={gameHour}
+            buildings={currentLocationId === 'my_home' ? buildings : []}
           />
         )}
 
-        {/* 2D/3D toggle row */}
+        {/* View toggle row */}
         <View style={styles.viewToggleRow}>
           <TouchableOpacity style={[styles.viewToggleBtn, !view3D && styles.viewToggleBtnActive]} onPress={() => setView3D(false)}>
-            <Text style={styles.viewToggleText}>🌸 Kawaii</Text>
+            <Text style={styles.viewToggleText}>🗺️ Isometric</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.viewToggleBtn, view3D && styles.viewToggleBtnActive]} onPress={() => setView3D(true)}>
             <Text style={styles.viewToggleText}>🎮 3D</Text>
@@ -1001,6 +1017,18 @@ const styles = StyleSheet.create({
   characterBody: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
   characterHair: { position: 'absolute', top: -5, width: 40, height: 18, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
   characterFaceEmoji: { fontSize: 26 },
+
+  // Chibi sprite (round head + small body, Toca-Boca-like)
+  chibiWrap: { alignItems: 'center', justifyContent: 'flex-start', width: 56 },
+  chibiHairBack: { position: 'absolute', top: 4, width: 48, height: 38, borderRadius: 24, zIndex: 0 },
+  chibiHead: { width: 46, height: 46, borderRadius: 23, justifyContent: 'flex-start', alignItems: 'center', borderWidth: 2.5, borderColor: 'rgba(0,0,0,0.18)', position: 'relative', zIndex: 2, paddingTop: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3, elevation: 4 },
+  chibiHairTop: { position: 'absolute', top: -2, left: 0, right: 0, height: 16, borderTopLeftRadius: 23, borderTopRightRadius: 23 },
+  chibiEyesRow: { flexDirection: 'row', gap: 10, marginTop: 4, zIndex: 3 },
+  chibiEye: { width: 5, height: 7, borderRadius: 2.5, backgroundColor: '#000' },
+  chibiCheeksRow: { flexDirection: 'row', gap: 16, position: 'absolute', top: 26 },
+  chibiCheek: { width: 5, height: 3.5, borderRadius: 2, backgroundColor: 'rgba(255,105,180,0.55)' },
+  chibiSmile: { position: 'absolute', bottom: 10, width: 10, height: 5, borderBottomLeftRadius: 5, borderBottomRightRadius: 5, borderWidth: 1.2, borderColor: '#000', borderTopWidth: 0, backgroundColor: 'transparent' },
+  chibiBody: { width: 34, height: 22, borderTopLeftRadius: 8, borderTopRightRadius: 8, borderBottomLeftRadius: 15, borderBottomRightRadius: 15, marginTop: -4, borderWidth: 2, borderColor: 'rgba(0,0,0,0.18)', zIndex: 1 },
   moodDot: { position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#FFF' },
   nameTag: { backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginTop: 4 },
   nameTagText: { color: '#FFF', fontSize: 10, fontWeight: '600' },
