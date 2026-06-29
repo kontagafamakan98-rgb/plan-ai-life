@@ -1125,15 +1125,15 @@ async def walk_character(character_id: str, target_x: float, target_y: float):
 
 @api_router.post("/characters/{character_id}/have-baby")
 async def have_baby(character_id: str, partner_id: str, baby_name: str, baby_gender: str = "male", user: dict = Depends(get_current_user)):
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+    # Allow guest mode (no auth) for MVP
+    user_id = user["id"] if user else f"guest_{uuid.uuid4().hex[:8]}"
     parent1 = await db.characters.find_one({"id": character_id})
     parent2 = await db.characters.find_one({"id": partner_id})
     if not parent1 or not parent2:
         raise HTTPException(status_code=404, detail="Character not found")
     
     baby = Character(
-        user_id=user["id"],
+        user_id=user_id,
         name=baby_name,
         age=0,
         gender=baby_gender,

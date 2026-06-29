@@ -1,0 +1,42 @@
+{
+  "summary": "Backend-only tests for guest-mode `POST /api/characters/{character_id}/have-baby` + regression. 12/12 new tests pass; full suite 52/52 (100%). Verified: (1) POST /api/characters/npc_sophie/have-baby?partner_id=npc_kenji&baby_name=Aria&baby_gender=female with NO Authorization header → 200; baby has age=0, gender='female', name='Aria', avatar_emoji='👶', is_npc=false, user_id starts with 'guest_', bio='Child of Sophie Laurent and Kenji Tanaka', appearance.skin_color ∈ {#F5D0C5, #E8C4A0} (parent set), appearance.height=50, family=['npc_sophie','npc_kenji']. (2) After baby created, GET /api/characters returns 4 (3 NPCs + baby) — module pre-reset via POST /api/reset ensures deterministic baseline. (3) GET /api/characters/npc_sophie.children and /api/characters/npc_kenji.children both include the new baby id (verified both parents). (4) POST /api/characters/npc_unknown/have-baby → 404; also POST with unknown partner → 404. (5) Regression all green: /api/health 200, /api/locations=31 incl. my_home, /api/build/catalog=24 (14 free + 10 premium), /api/characters returns NPCs Sophie/Kenji/Marcus, /api/simulate 200, /api/world 200 with expected schema.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/characters/{id}/have-baby", "issue": "No validation that the two parents are distinct — calling with character_id==partner_id succeeds and creates a baby with family=[X, X]. Recommend `if character_id == partner_id: raise 400`."},
+      {"endpoint": "POST /api/characters/{id}/have-baby", "issue": "No gender/age sanity checks — two adult characters of any gender combination always succeed (matches MVP scope, flagging for future)."},
+      {"endpoint": "GET /api/characters & most list endpoints", "issue": "(Carry-over) MongoDB '_id' (stringified ObjectId) still leaks into responses. serialize_doc converts ObjectId to str instead of dropping the field. Per code-review guideline, '_id' must always be excluded."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_have_baby_guest.py",
+    "/app/test_reports/pytest/pytest_have_baby.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional hardening) Reject have-baby when character_id == partner_id with HTTP 400 — currently creates a baby whose family lists the same parent twice.",
+    "(Carry-over) Update serialize_doc to drop '_id' rather than stringify it; leaks into /api/locations, /api/characters, /api/build/items, /api/logs.",
+    "(Carry-over) Split server.py (>1500 lines) into modules — exceeds 700-line guideline.",
+    "(Carry-over) Decide policy on shared 'guest' user_id for /api/build/* (all anon users share same bucket)."
+  ],
+  "critical_code_review_comments": [
+    "have_baby endpoint uses query params (partner_id, baby_name, baby_gender) instead of a Pydantic body — works but a `HaveBabyRequest` BaseModel would give 422 instead of FastAPI's default 'field required' shape and is more idiomatic.",
+    "Baby's `partner_id` is not set on either parent; only `children` is appended. If the app relies on `partner_id` for couple-state, this is a pre-existing gap (not part of this change set).",
+    "serialize_doc continues to stringify Mongo _id rather than exclude it (carry-over from iter_1/2)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_have_baby_guest.py (NEW — 12 tests: 6 have-baby + 6 regression, module-scoped /api/reset fixture for deterministic baseline)"
+  ],
+  "success_rate": {"backend": "100% (12/12 new; 52/52 full suite)", "frontend": "N/A (skipped per request)"},
+  "seed_data_creation": "test_have_baby_guest.py uses a module-scoped autouse fixture that POSTs /api/reset before tests run, so the DB starts each module-run with exactly 3 seeded NPCs and no extra guest characters. The baby 'Aria' is left in the DB after the test (acceptable — needed for downstream assertions; next /api/reset call clears it).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: `pytest /app/backend/tests/ -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. BASE_URL is read from /app/frontend/.env -> EXPO_PUBLIC_BACKEND_URL. test_have_baby_guest.py auto-resets DB via POST /api/reset (drops all characters, locations, world_state, chat, action_logs, then re-seeds 3 NPCs + 31 locations). NOTE: /api/reset does NOT clear db.buildings collection. Have-baby endpoint accepts query params (partner_id, baby_name, baby_gender) — not JSON body. Guest mode is unauthenticated; user_id is generated as guest_<8-hex>. Sophie's skin_color=#F5D0C5, Kenji's=#E8C4A0 (used to assert baby inherits one of two).",
+  "rca_of_issue": "N/A — all assertions passed for the requested have-baby guest-mode change and the 5 regression endpoints."
+}

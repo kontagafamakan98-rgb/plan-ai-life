@@ -22,6 +22,8 @@ import axios from 'axios';
 import { CharacterCreatorModal } from '../src/components/CharacterCreatorModal';
 import { BuildModeModal } from '../src/components/BuildModeModal';
 import { PremiumModal } from '../src/components/PremiumModal';
+import { Scene3D } from '../src/components/Scene3D';
+import { HaveBabyModal } from '../src/components/HaveBabyModal';
 
 // Map character actions → overlay emoji shown next to them
 const ACTION_ICONS: Record<string, string> = {
@@ -492,7 +494,8 @@ const CharacterDetailModal: React.FC<{
   character: Character | null;
   onClose: () => void;
   onTravel: () => void;
-}> = ({ character, onClose, onTravel }) => {
+  onHaveBaby: (parent: Character) => void;
+}> = ({ character, onClose, onTravel, onHaveBaby }) => {
   if (!character) return null;
 
   const needs = character.needs || {};
@@ -576,10 +579,18 @@ const CharacterDetailModal: React.FC<{
             </View>
           </ScrollView>
           
-          <TouchableOpacity style={styles.travelButton} onPress={onTravel}>
-            <Ionicons name="airplane" size={20} color="#FFF" />
-            <Text style={styles.travelButtonText}>Travel</Text>
-          </TouchableOpacity>
+          <View style={styles.modalActionsRow}>
+            <TouchableOpacity style={styles.travelButton} onPress={onTravel}>
+              <Ionicons name="airplane" size={18} color="#FFF" />
+              <Text style={styles.travelButtonText}>Travel</Text>
+            </TouchableOpacity>
+            {character.age >= 18 && (
+              <TouchableOpacity style={styles.babyButton} onPress={() => onHaveBaby(character)}>
+                <Text style={styles.babyButtonEmoji}>👶</Text>
+                <Text style={styles.travelButtonText}>Baby</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </Modal>
@@ -608,7 +619,10 @@ export default function LifeSimulator() {
   const [showCreator, setShowCreator] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const [showPremium, setShowPremium] = useState(false);
-  const [gameHour, setGameHour] = useState(new Date().getHours());
+  const [showHaveBaby, setShowHaveBaby] = useState(false);
+  const [babyParent, setBabyParent] = useState<Character | null>(null);
+  const [view3D, setView3D] = useState(true);
+  const [gameHour, setGameHour] = useState(12); // start at noon for bright first view
   const [isPremium] = useState(false); // TODO: wire to auth user
 
   const fetchData = useCallback(async () => {
@@ -732,15 +746,40 @@ export default function LifeSimulator() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#00D4FF" />}
       >
-        {/* Isometric World View */}
-        <IsometricWorld
-          characters={characters}
-          location={currentLocation || null}
-          onCharacterPress={setSelectedCharacter}
-          onLocationChange={() => setShowLocationPicker(true)}
-          gameHour={gameHour}
-          buildings={currentLocationId === 'my_home' ? buildings : []}
-        />
+        {/* 2D Isometric or 3D World */}
+        {view3D ? (
+          <Scene3D
+            characters={(currentLocation ? characters.filter(c => c.location_id === currentLocation.id) : []) as any}
+            locationType={currentLocation?.type || 'park'}
+            locationName={currentLocation?.name}
+            buildings={currentLocationId === 'my_home' ? buildings : []}
+            gameHour={gameHour}
+            onCharacterClick={setSelectedCharacter}
+          />
+        ) : (
+          <IsometricWorld
+            characters={characters}
+            location={currentLocation || null}
+            onCharacterPress={setSelectedCharacter}
+            onLocationChange={() => setShowLocationPicker(true)}
+            gameHour={gameHour}
+            buildings={currentLocationId === 'my_home' ? buildings : []}
+          />
+        )}
+
+        {/* 2D/3D toggle row */}
+        <View style={styles.viewToggleRow}>
+          <TouchableOpacity style={[styles.viewToggleBtn, !view3D && styles.viewToggleBtnActive]} onPress={() => setView3D(false)}>
+            <Text style={styles.viewToggleText}>🗺️ 2D Isometric</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.viewToggleBtn, view3D && styles.viewToggleBtnActive]} onPress={() => setView3D(true)}>
+            <Text style={styles.viewToggleText}>🎮 3D View</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.travelChipBtn} onPress={() => setShowLocationPicker(true)}>
+            <Ionicons name="airplane" size={14} color="#FFF" />
+            <Text style={styles.viewToggleText}>Travel</Text>
+          </TouchableOpacity>
+        </View>
         
         {/* God Control Panel */}
         <GodControlPanel
@@ -830,6 +869,20 @@ export default function LifeSimulator() {
             setShowLocationPicker(true);
           }
         }}
+        onHaveBaby={(p) => {
+          setBabyParent(p);
+          setSelectedCharacter(null);
+          setTimeout(() => setShowHaveBaby(true), 200);
+        }}
+      />
+
+      {/* Have Baby Modal */}
+      <HaveBabyModal
+        visible={showHaveBaby}
+        parent={babyParent as any}
+        candidates={characters as any}
+        onClose={() => { setShowHaveBaby(false); setBabyParent(null); }}
+        onBabyCreated={(baby) => { fetchData(); alert(`👶 ${baby.name} is born! Welcome to the world!`); }}
       />
       
       {/* Settings Modal */}
@@ -897,6 +950,12 @@ const styles = StyleSheet.create({
   headerBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
   headerBtnPremium: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,215,0,0.18)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.6)', justifyContent: 'center', alignItems: 'center' },
   headerCrown: { fontSize: 18 },
+
+  viewToggleRow: { flexDirection: 'row', marginHorizontal: 10, marginTop: 8, gap: 6 },
+  viewToggleBtn: { flex: 1, paddingVertical: 8, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 10, alignItems: 'center' },
+  viewToggleBtnActive: { backgroundColor: '#00D4FF' },
+  viewToggleText: { color: '#FFF', fontSize: 11, fontWeight: '600' },
+  travelChipBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: 'rgba(233,30,99,0.6)', borderRadius: 10 },
   
   // Action overlay
   actionOverlay: { position: 'absolute', top: -8, right: -18, backgroundColor: '#FFF', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 3 },
@@ -1047,8 +1106,11 @@ const styles = StyleSheet.create({
   moneyCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,215,0,0.1)', padding: 12, borderRadius: 10 },
   moneyIcon: { fontSize: 24 },
   moneyValue: { color: '#FFD700', fontSize: 24, fontWeight: '700', marginLeft: 8 },
-  travelButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00D4FF', margin: 16, padding: 14, borderRadius: 12, gap: 8 },
+  travelButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00D4FF', padding: 14, borderRadius: 12, gap: 8 },
   travelButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  modalActionsRow: { flexDirection: 'row', gap: 10, margin: 16 },
+  babyButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#E91E63', padding: 14, borderRadius: 12, gap: 8 },
+  babyButtonEmoji: { fontSize: 20 },
   
   // Settings Modal
   settingsModal: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16 },
