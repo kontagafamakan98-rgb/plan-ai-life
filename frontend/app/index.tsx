@@ -292,14 +292,7 @@ const IsometricWorld: React.FC<{
         </>
       )}
       
-      {/* Distant horizon mountains/buildings silhouette */}
-      <View style={styles.horizonLayer}>
-        <Text style={styles.horizonObj}>🏔️</Text>
-        <Text style={[styles.horizonObj, { left: 90 }]}>🏢</Text>
-        <Text style={[styles.horizonObj, { left: 170 }]}>🏛️</Text>
-        <Text style={[styles.horizonObj, { right: 90 }]}>🏬</Text>
-        <Text style={[styles.horizonObj, { right: 20 }]}>🗼</Text>
-      </View>
+      {/* (Horizon silhouettes removed — caused dark rectangle artifacts at low opacity) */}
       
       {/* Location header */}
       <TouchableOpacity style={styles.locationHeader} onPress={onLocationChange}>
