@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   TextInput,
   Modal,
   Platform,
+  Animated,
+  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -31,411 +33,450 @@ interface Character {
   location_id: string;
   position_x: number;
   position_y: number;
-  target_x: number;
-  target_y: number;
   is_moving: boolean;
   needs: Record<string, number>;
   attributes: Record<string, number>;
-  personality: Record<string, number>;
-  objectives: string[];
-  hobbies: string[];
   current_action: string;
   mood: string;
   thoughts: string[];
   money: number;
-  appearance: { skin_color: string; hair_color: string; height: number };
+  appearance: { skin_color: string; hair_color: string };
   is_npc: boolean;
 }
 
 interface Location {
   id: string;
   name: string;
-  description: string;
   city: string;
   country: string;
   emoji: string;
-  available_actions: string[];
+  type: string;
 }
 
-// Translations hook
-const useTranslations = (lang: string) => {
-  const [t, setT] = useState<Record<string, any>>({});
-  useEffect(() => {
-    axios.get(`${API_BASE}/api/translations/${lang}`).then(r => setT(r.data)).catch(() => {});
-  }, [lang]);
-  return t;
-};
-
-// 2D Character Sprite Component
-const CharacterSprite: React.FC<{
+// Animated Walking Character Component
+const WalkingCharacter: React.FC<{
   character: Character;
+  index: number;
   onPress: () => void;
   worldWidth: number;
   worldHeight: number;
-}> = ({ character, onPress, worldWidth, worldHeight }) => {
-  const x = (character.position_x / 100) * worldWidth;
-  const y = (character.position_y / 100) * (worldHeight - 60) + 30;
+}> = ({ character, index, onPress, worldWidth, worldHeight }) => {
+  const walkAnim = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
   
+  useEffect(() => {
+    // Walking bounce animation
+    if (character.is_moving) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(walkAnim, { toValue: 1, duration: 150, useNativeDriver: false, easing: Easing.ease }),
+          Animated.timing(walkAnim, { toValue: 0, duration: 150, useNativeDriver: false, easing: Easing.ease }),
+        ])
+      ).start();
+    } else {
+      walkAnim.setValue(0);
+    }
+    
+    // Idle floating animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, { toValue: 1, duration: 2000, useNativeDriver: false, easing: Easing.inOut(Easing.ease) }),
+        Animated.timing(floatAnim, { toValue: 0, duration: 2000, useNativeDriver: false, easing: Easing.inOut(Easing.ease) }),
+      ])
+    ).start();
+  }, [character.is_moving]);
+
+  const bounceY = walkAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -8] });
+  const floatY = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -3] });
+  
+  // Calculate position with deterministic per-character offset so multiple
+  // characters in the same location never fully overlap.
+  const offsetX = ((index % 3) - 1) * 70; // -70, 0, +70
+  const offsetY = (Math.floor(index / 3) % 2) * 50; // 0 or +50 (second row)
+  const rawX = (character.position_x / 100) * worldWidth + offsetX;
+  const rawY = (character.position_y / 100) * (worldHeight - 80) + 50 + offsetY;
+  const x = Math.max(30, Math.min(worldWidth - 80, rawX));
+  const y = Math.max(60, Math.min(worldHeight - 100, rawY));
+
+  const moodColors: Record<string, string> = {
+    'Happy': '#4CAF50', 'Excited': '#FF9800', 'Content': '#8BC34A', 'Focused': '#2196F3',
+    'Sad': '#5C6BC0', 'Tired': '#9E9E9E', 'Anxious': '#F44336', 'Bored': '#795548',
+  };
+
   return (
-    <TouchableOpacity
+    <Animated.View
       style={[
-        styles.characterSprite,
-        { left: x - 20, top: y - 40 }
+        styles.walkingCharacter,
+        {
+          left: x,
+          top: y,
+          transform: [{ translateY: character.is_moving ? bounceY : floatY }],
+          zIndex: 100 + index,
+        }
       ]}
-      onPress={onPress}
-      activeOpacity={0.8}
     >
-      {/* Body */}
-      <View style={[styles.spriteBody, { backgroundColor: character.appearance?.skin_color || '#F5D0C5' }]}>
-        {/* Face */}
-        <Text style={styles.spriteEmoji}>{character.avatar_emoji}</Text>
-      </View>
-      
-      {/* Walking animation indicator */}
-      {character.is_moving && (
-        <View style={styles.walkingDots}>
-          <View style={[styles.walkDot, styles.walkDot1]} />
-          <View style={[styles.walkDot, styles.walkDot2]} />
-          <View style={[styles.walkDot, styles.walkDot3]} />
+      <TouchableOpacity onPress={onPress} activeOpacity={0.85}>
+        {/* Shadow */}
+        <View style={styles.characterShadow} />
+        
+        {/* Character Body */}
+        <View style={[styles.characterBody, { backgroundColor: character.appearance?.skin_color || '#F5D0C5' }]}>
+          {/* Hair */}
+          <View style={[styles.characterHair, { backgroundColor: character.appearance?.hair_color || '#4A3728' }]} />
+          
+          {/* Face */}
+          <Text style={styles.characterFaceEmoji}>{character.avatar_emoji}</Text>
         </View>
-      )}
-      
-      {/* Name tag */}
-      <View style={styles.spriteNameTag}>
-        <Text style={styles.spriteNameText}>{character.name.split(' ')[0]}</Text>
-      </View>
-      
-      {/* Thought bubble */}
-      {character.thoughts.length > 0 && (
-        <View style={styles.thoughtBubble}>
-          <Text style={styles.thoughtEmoji}>💭</Text>
+        
+        {/* Mood indicator */}
+        <View style={[styles.moodDot, { backgroundColor: moodColors[character.mood] || '#4CAF50' }]} />
+        
+        {/* Name tag */}
+        <View style={styles.nameTag}>
+          <Text style={styles.nameTagText}>{character.name.split(' ')[0]}</Text>
         </View>
-      )}
-      
-      {/* Action indicator */}
-      <View style={[styles.actionBubble, { backgroundColor: character.is_moving ? '#00D4FF' : '#4CAF50' }]}>
-        <Text style={styles.actionText}>{character.current_action.substring(0, 12)}</Text>
-      </View>
-    </TouchableOpacity>
+        
+        {/* Action bubble */}
+        <View style={styles.actionBubble}>
+          <Text style={styles.actionBubbleText}>{character.current_action.substring(0, 15)}</Text>
+        </View>
+        
+        {/* Walking legs animation */}
+        {character.is_moving && (
+          <View style={styles.walkingLegs}>
+            <View style={[styles.leg, styles.leftLeg]} />
+            <View style={[styles.leg, styles.rightLeg]} />
+          </View>
+        )}
+        
+        {/* Thought bubble */}
+        {character.thoughts && character.thoughts.length > 0 && (
+          <View style={styles.thoughtCloud}>
+            <Text style={styles.thoughtCloudText}>💭</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </Animated.View>
   );
 };
 
-// World View with 2D Characters
-const WorldView: React.FC<{
+// Isometric World View
+const IsometricWorld: React.FC<{
   characters: Character[];
-  currentLocation: Location | null;
+  location: Location | null;
   onCharacterPress: (char: Character) => void;
-  onWorldTap: (x: number, y: number) => void;
-}> = ({ characters, currentLocation, onCharacterPress, onWorldTap }) => {
-  const worldWidth = width - 32;
-  const worldHeight = 280;
+  onLocationChange: () => void;
+}> = ({ characters, location, onCharacterPress, onLocationChange }) => {
+  const worldWidth = width - 20;
+  const worldHeight = 350;
   
-  // Filter characters by current location - use ID comparison
-  const locationChars = currentLocation 
-    ? characters.filter(c => c.location_id === currentLocation.id)
-    : [];
+  const locationChars = location ? characters.filter(c => c.location_id === location.id) : [];
   
-  // Debug log
-  console.log('WorldView:', { 
-    currentLocId: currentLocation?.id, 
-    totalChars: characters.length,
-    filteredChars: locationChars.length,
-    charLocs: characters.map(c => c.location_id)
-  });
+  // Location-specific backgrounds
+  const getLocationStyle = (type: string) => {
+    const styles: Record<string, { sky: string[]; ground: string; objects: string[] }> = {
+      'cafe': { sky: ['#87CEEB', '#FFE4B5'], ground: '#D2B48C', objects: ['☕', '🪑', '🌸'] },
+      'apartment': { sky: ['#4A5568', '#2D3748'], ground: '#718096', objects: ['🏢', '🪴', '🛋️'] },
+      'office': { sky: ['#E2E8F0', '#CBD5E0'], ground: '#A0AEC0', objects: ['💼', '📊', '🖥️'] },
+      'park': { sky: ['#87CEEB', '#98FB98'], ground: '#228B22', objects: ['🌳', '🌸', '🦆'] },
+      'gym': { sky: ['#F56565', '#ED8936'], ground: '#E53E3E', objects: ['🏋️', '🥊', '💪'] },
+      'restaurant': { sky: ['#F6AD55', '#ED8936'], ground: '#DD6B20', objects: ['🍕', '🍷', '🕯️'] },
+      'club': { sky: ['#553C9A', '#6B46C1'], ground: '#44337A', objects: ['🎵', '🎧', '💃'] },
+      'beach': { sky: ['#63B3ED', '#4FD1C5'], ground: '#ECC94B', objects: ['🌴', '🏖️', '🌊'] },
+      'school': { sky: ['#90CDF4', '#63B3ED'], ground: '#4A5568', objects: ['📚', '✏️', '🎒'] },
+      'hospital': { sky: ['#E2E8F0', '#CBD5E0'], ground: '#FFFFFF', objects: ['🏥', '💊', '🩺'] },
+      'market': { sky: ['#F6AD55', '#FC8181'], ground: '#C53030', objects: ['🛒', '🍎', '🧺'] },
+      'museum': { sky: ['#B794F4', '#9F7AEA'], ground: '#6B46C1', objects: ['🎨', '🖼️', '🏛️'] },
+      'cinema': { sky: ['#1A202C', '#2D3748'], ground: '#4A5568', objects: ['🎬', '🍿', '🎥'] },
+      'temple': { sky: ['#F6E05E', '#ECC94B'], ground: '#D69E2E', objects: ['⛩️', '🙏', '🔔'] },
+      'mountain': { sky: ['#63B3ED', '#FFFFFF'], ground: '#48BB78', objects: ['⛰️', '🏔️', '🌲'] },
+    };
+    return styles[type] || styles['park'];
+  };
+  
+  const locStyle = getLocationStyle(location?.type || 'park');
 
   return (
-    <View style={[styles.worldView, { width: worldWidth, height: worldHeight }]}>
-      {/* Sky gradient */}
-      <LinearGradient
-        colors={['#87CEEB', '#B0E0E6', '#98FB98']}
-        style={StyleSheet.absoluteFill}
-      />
+    <View style={[styles.isometricWorld, { width: worldWidth, height: worldHeight }]}>
+      {/* Sky */}
+      <LinearGradient colors={locStyle.sky} style={styles.sky} />
+      
+      {/* Sun/Moon */}
+      <View style={styles.celestialBody}>
+        <Text style={styles.celestialEmoji}>☀️</Text>
+      </View>
       
       {/* Clouds */}
-      <View style={[styles.cloud, { left: 20, top: 20 }]}>
-        <Text style={styles.cloudEmoji}>☁️</Text>
-      </View>
-      <View style={[styles.cloud, { left: worldWidth - 80, top: 30 }]}>
-        <Text style={styles.cloudEmoji}>☁️</Text>
-      </View>
+      <View style={[styles.cloud, { left: 30, top: 25 }]}><Text style={styles.cloudText}>☁️</Text></View>
+      <View style={[styles.cloud, { right: 50, top: 40 }]}><Text style={styles.cloudText}>☁️</Text></View>
       
-      {/* Location info */}
-      <View style={styles.worldHeader}>
-        <Text style={styles.worldEmoji}>{currentLocation?.emoji || '🌍'}</Text>
-        <Text style={styles.worldName}>{currentLocation?.name || 'World'}</Text>
-        <Text style={styles.worldCity}>{currentLocation?.city}</Text>
-      </View>
-
+      {/* Location header */}
+      <TouchableOpacity style={styles.locationHeader} onPress={onLocationChange}>
+        <View style={styles.locationFlag}>
+          <Text style={styles.locationEmoji}>{location?.emoji || '🌍'}</Text>
+        </View>
+        <View style={styles.locationInfo}>
+          <Text style={styles.locationName}>{location?.name || 'Unknown'}</Text>
+          <Text style={styles.locationCity}>{location?.city}, {location?.country}</Text>
+        </View>
+        <Ionicons name="chevron-down" size={20} color="#FFF" />
+      </TouchableOpacity>
+      
       {/* Ground */}
-      <View style={styles.ground}>
-        <View style={styles.groundGrass} />
-      </View>
-
-      {/* Trees/Objects */}
-      <Text style={[styles.worldObject, { left: 10, bottom: 50 }]}>🌳</Text>
-      <Text style={[styles.worldObject, { right: 20, bottom: 55 }]}>🌲</Text>
-      
-      {/* Characters - rendered as positioned views */}
-      {locationChars.map((char, index) => {
-        // Calculate position within visible area
-        const charX = 30 + (index * 80); // Spread characters horizontally
-        const charY = 100 + (index * 30); // Stagger vertically
-        
-        return (
-          <TouchableOpacity
-            key={char.id}
-            style={{
-              position: 'absolute',
-              left: charX,
-              top: charY,
-              alignItems: 'center',
-              zIndex: 100 + index,
-              backgroundColor: 'transparent',
-            }}
-            onPress={() => onCharacterPress(char)}
-            activeOpacity={0.8}
-          >
-            {/* Character body/head */}
-            <View style={{
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              backgroundColor: char.appearance?.skin_color || '#F5D0C5',
-              justifyContent: 'center',
-              alignItems: 'center',
-              borderWidth: 3,
-              borderColor: '#FFF',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.3,
-              shadowRadius: 3,
-              elevation: 5,
-            }}>
-              <Text style={{ fontSize: 24 }}>{char.avatar_emoji}</Text>
-            </View>
-            {/* Walking indicator */}
-            {char.is_moving && (
-              <View style={styles.walkingDots}>
-                <View style={[styles.walkDot, styles.walkDot1]} />
-                <View style={[styles.walkDot, styles.walkDot2]} />
-                <View style={[styles.walkDot, styles.walkDot3]} />
-              </View>
-            )}
-            {/* Name */}
-            <View style={{
-              backgroundColor: 'rgba(0,0,0,0.7)',
-              paddingHorizontal: 6,
-              paddingVertical: 2,
-              borderRadius: 6,
-              marginTop: 4,
-            }}>
-              <Text style={{ color: '#FFF', fontSize: 10, fontWeight: '600' }}>{char.name.split(' ')[0]}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-
-      {/* Character count - shows how many are HERE */}
-      <View style={styles.charCount}>
-        <Ionicons name="people" size={14} color="#FFF" />
-        <Text style={styles.charCountText}>{locationChars.length}</Text>
+      <View style={[styles.ground, { backgroundColor: locStyle.ground }]}>
+        {/* Ground pattern */}
+        <View style={styles.groundPattern} />
       </View>
       
-      {/* Tap instruction */}
-      {locationChars.length > 0 && (
-        <View style={styles.tapInstruction}>
-          <Text style={styles.tapText}>Tap character to select</Text>
-        </View>
-      )}
+      {/* Decorative objects */}
+      {locStyle.objects.map((obj, i) => (
+        <Text key={i} style={[styles.decorObject, { left: 20 + (i * (worldWidth / 4)), bottom: 45 + (i % 2) * 15 }]}>
+          {obj}
+        </Text>
+      ))}
       
+      {/* Characters */}
+      {locationChars.map((char, index) => (
+        <WalkingCharacter
+          key={char.id}
+          character={char}
+          index={index}
+          onPress={() => onCharacterPress(char)}
+          worldWidth={worldWidth}
+          worldHeight={worldHeight}
+        />
+      ))}
+      
+      {/* Empty state */}
       {locationChars.length === 0 && (
-        <View style={styles.emptyLocation}>
-          <Text style={styles.emptyText}>No one here yet</Text>
+        <View style={styles.emptyWorld}>
+          <Text style={styles.emptyText}>👻 No one here...</Text>
+          <Text style={styles.emptySubtext}>Change location or wait for characters</Text>
         </View>
       )}
+      
+      {/* Character count */}
+      <View style={styles.charCounter}>
+        <Ionicons name="people" size={16} color="#FFF" />
+        <Text style={styles.charCounterText}>{locationChars.length}</Text>
+      </View>
     </View>
   );
 };
 
-// Character Creation Modal with full attributes
-const CreateCharacterModal: React.FC<{
-  visible: boolean;
-  onClose: () => void;
-  onCreated: () => void;
-  t: any;
-}> = ({ visible, onClose, onCreated, t }) => {
-  const [name, setName] = useState('');
-  const [age, setAge] = useState('25');
-  const [gender, setGender] = useState('male');
-  const [occupation, setOccupation] = useState('unemployed');
-  const [skinColor, setSkinColor] = useState('#F5D0C5');
-  const [hairColor, setHairColor] = useState('#4A3728');
-  
-  // Attributes
-  const [intelligence, setIntelligence] = useState(50);
-  const [strength, setStrength] = useState(50);
-  const [charisma, setCharisma] = useState(50);
-  const [beauty, setBeauty] = useState(50);
-  const [creativity, setCreativity] = useState(50);
-  const [luck, setLuck] = useState(50);
-  
-  // Personality
-  const [extroversion, setExtroversion] = useState(50);
-  const [kindness, setKindness] = useState(50);
-  const [humor, setHumor] = useState(50);
-  const [ambition, setAmbition] = useState(50);
-  
-  // Life setup
-  const [objectives, setObjectives] = useState<string[]>([]);
-  const [hobbies, setHobbies] = useState<string[]>([]);
-  
-  const [creating, setCreating] = useState(false);
-
-  const skinColors = ['#FFDFC4', '#F5D0C5', '#E8C4A0', '#D4A574', '#8D5524', '#5C3317'];
-  const hairColors = ['#1A1A1A', '#4A3728', '#8B4513', '#D4A017', '#FF6B35', '#E8E8E8'];
-  
-  const objectivesList = ['become_rich', 'find_love', 'have_family', 'become_famous', 'travel_world', 'stay_healthy'];
-  const hobbiesList = ['reading', 'gaming', 'cooking', 'sports', 'music', 'art', 'dancing', 'socializing'];
-
-  const handleCreate = async () => {
-    if (!name.trim()) return;
-    setCreating(true);
-    try {
-      const token = Platform.OS === 'web' ? localStorage.getItem('auth_token') : null;
-      await axios.post(`${API_BASE}/api/characters/create`, {
-        name, age: parseInt(age) || 25, gender, occupation, education: 'none', bio: '',
-        skin_color: skinColor, hair_color: hairColor, eye_color: '#6B4423', height: 170, body_type: 'average',
-        intelligence, strength, charisma, beauty, creativity, luck,
-        extroversion, kindness, humor, ambition,
-        objectives, hobbies
-      }, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
-      onCreated();
-      onClose();
-    } catch (error: any) {
-      alert(error.response?.data?.detail || 'Error creating character');
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const AttributeSlider = ({ label, value, setValue, emoji }: { label: string; value: number; setValue: (v: number) => void; emoji: string }) => (
-    <View style={styles.sliderRow}>
-      <Text style={styles.sliderEmoji}>{emoji}</Text>
-      <Text style={styles.sliderLabel}>{label}</Text>
-      <View style={styles.sliderTrack}>
-        <View style={[styles.sliderFill, { width: `${value}%` }]} />
+// God Control Panel
+const GodControlPanel: React.FC<{
+  onSimulate: () => void;
+  onPause: () => void;
+  onSpeedChange: (speed: number) => void;
+  isPaused: boolean;
+  isSimulating: boolean;
+  autoSimulate: boolean;
+  onAutoToggle: () => void;
+  speed: number;
+}> = ({ onSimulate, onPause, onSpeedChange, isPaused, isSimulating, autoSimulate, onAutoToggle, speed }) => {
+  return (
+    <View style={styles.godPanel}>
+      <View style={styles.godPanelHeader}>
+        <Text style={styles.godPanelTitle}>⚡ GOD MODE</Text>
+        <View style={[styles.statusDot, { backgroundColor: isPaused ? '#F44336' : '#4CAF50' }]} />
       </View>
-      <View style={styles.sliderButtons}>
-        <TouchableOpacity onPress={() => setValue(Math.max(0, value - 10))} style={styles.sliderBtn}>
-          <Text style={styles.sliderBtnText}>-</Text>
+      
+      <View style={styles.controlsRow}>
+        <TouchableOpacity 
+          style={[styles.controlBtn, isSimulating && styles.controlBtnActive]}
+          onPress={onSimulate}
+          disabled={isSimulating}
+        >
+          {isSimulating ? (
+            <ActivityIndicator size="small" color="#FFF" />
+          ) : (
+            <>
+              <Ionicons name="flash" size={20} color="#FFF" />
+              <Text style={styles.controlBtnText}>Simulate</Text>
+            </>
+          )}
         </TouchableOpacity>
-        <Text style={styles.sliderValue}>{value}</Text>
-        <TouchableOpacity onPress={() => setValue(Math.min(100, value + 10))} style={styles.sliderBtn}>
-          <Text style={styles.sliderBtnText}>+</Text>
+        
+        <TouchableOpacity 
+          style={[styles.controlBtn, styles.controlBtnSecondary, isPaused && styles.controlBtnDanger]}
+          onPress={onPause}
+        >
+          <Ionicons name={isPaused ? "play" : "pause"} size={20} color="#FFF" />
+          <Text style={styles.controlBtnText}>{isPaused ? 'Resume' : 'Pause'}</Text>
         </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.controlBtn, styles.controlBtnSmall, autoSimulate && styles.controlBtnActive]}
+          onPress={onAutoToggle}
+        >
+          <Ionicons name={autoSimulate ? "sync" : "sync-outline"} size={18} color="#FFF" />
+          <Text style={styles.controlBtnTextSmall}>Auto</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {/* Speed control */}
+      <View style={styles.speedRow}>
+        <Text style={styles.speedLabel}>Speed:</Text>
+        {[1, 2, 3].map(s => (
+          <TouchableOpacity 
+            key={s} 
+            style={[styles.speedBtn, speed === s && styles.speedBtnActive]}
+            onPress={() => onSpeedChange(s)}
+          >
+            <Text style={styles.speedBtnText}>{s}x</Text>
+          </TouchableOpacity>
+        ))}
       </View>
     </View>
   );
+};
 
-  const toggleItem = (item: string, list: string[], setList: (l: string[]) => void) => {
-    if (list.includes(item)) {
-      setList(list.filter(i => i !== item));
-    } else if (list.length < 3) {
-      setList([...list, item]);
-    }
-  };
+// Location Selector Modal
+const LocationSelector: React.FC<{
+  visible: boolean;
+  locations: Location[];
+  currentId: string;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}> = ({ visible, locations, currentId, onSelect, onClose }) => {
+  // Group locations by country
+  const grouped = locations.reduce((acc, loc) => {
+    if (!acc[loc.country]) acc[loc.country] = [];
+    acc[loc.country].push(loc);
+    return acc;
+  }, {} as Record<string, Location[]>);
 
   return (
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.modalOverlay}>
-        <View style={styles.createModal}>
+        <View style={styles.locationModal}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{t.create_character || 'Create Character'}</Text>
+            <Text style={styles.modalTitle}>🌍 Travel To</Text>
             <TouchableOpacity onPress={onClose}>
               <Ionicons name="close" size={24} color="#FFF" />
             </TouchableOpacity>
           </View>
+          
+          <ScrollView style={styles.locationList} showsVerticalScrollIndicator={false}>
+            {Object.entries(grouped).map(([country, locs]) => (
+              <View key={country}>
+                <Text style={styles.countryHeader}>{country}</Text>
+                {locs.map(loc => (
+                  <TouchableOpacity
+                    key={loc.id}
+                    style={[styles.locationOption, currentId === loc.id && styles.locationOptionActive]}
+                    onPress={() => { onSelect(loc.id); onClose(); }}
+                  >
+                    <Text style={styles.locationOptionEmoji}>{loc.emoji}</Text>
+                    <View style={styles.locationOptionInfo}>
+                      <Text style={styles.locationOptionName}>{loc.name}</Text>
+                      <Text style={styles.locationOptionCity}>{loc.city}</Text>
+                    </View>
+                    {currentId === loc.id && <Ionicons name="checkmark-circle" size={20} color="#00D4FF" />}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+};
 
-          <ScrollView style={styles.createForm} showsVerticalScrollIndicator={false}>
-            {/* Preview */}
-            <View style={styles.previewContainer}>
-              <View style={[styles.previewAvatar, { backgroundColor: skinColor }]}>
-                <Text style={styles.previewEmoji}>
-                  {parseInt(age) < 13 ? '👶' : (gender === 'female' ? '👩' : '👨')}
-                </Text>
+// Character Detail Modal
+const CharacterDetailModal: React.FC<{
+  character: Character | null;
+  onClose: () => void;
+  onTravel: () => void;
+}> = ({ character, onClose, onTravel }) => {
+  if (!character) return null;
+
+  const needs = character.needs || {};
+  const attrs = character.attributes || {};
+
+  return (
+    <Modal visible={!!character} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={styles.characterModal}>
+          <View style={styles.modalHeader}>
+            <View style={styles.characterModalHeader}>
+              <View style={[styles.bigAvatar, { backgroundColor: character.appearance?.skin_color || '#F5D0C5' }]}>
+                <Text style={styles.bigAvatarEmoji}>{character.avatar_emoji}</Text>
+              </View>
+              <View style={styles.characterMainInfo}>
+                <Text style={styles.characterModalName}>{character.name}</Text>
+                <Text style={styles.characterModalJob}>{character.occupation}, {character.age}</Text>
+                <Text style={styles.characterModalMood}>{character.mood}</Text>
               </View>
             </View>
-
-            {/* Basic Info */}
-            <Text style={styles.sectionLabel}>📝 Basic Info</Text>
-            <TextInput style={styles.textInput} value={name} onChangeText={setName} placeholder="Name..." placeholderTextColor="#666" />
-            <TextInput style={styles.textInput} value={age} onChangeText={setAge} keyboardType="number-pad" placeholder="Age" placeholderTextColor="#666" />
-
-            {/* Gender */}
-            <View style={styles.optionRow}>
-              {[{id:'male', emoji:'👨'}, {id:'female', emoji:'👩'}, {id:'other', emoji:'🧑'}].map(g => (
-                <TouchableOpacity key={g.id} style={[styles.optionBtn, gender === g.id && styles.optionBtnActive]} onPress={() => setGender(g.id)}>
-                  <Text style={styles.optionEmoji}>{g.emoji}</Text>
-                </TouchableOpacity>
-              ))}
+            <TouchableOpacity onPress={onClose}>
+              <Ionicons name="close" size={24} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.characterModalContent}>
+            {/* Current Action */}
+            <View style={styles.actionCard}>
+              <Ionicons name="play-circle" size={20} color="#00D4FF" />
+              <Text style={styles.actionCardText}>{character.current_action}</Text>
             </View>
-
-            {/* Colors */}
-            <Text style={styles.sectionLabel}>🎨 Appearance</Text>
-            <Text style={styles.subLabel}>Skin</Text>
-            <View style={styles.colorRow}>
-              {skinColors.map(c => (
-                <TouchableOpacity key={c} style={[styles.colorBtn, { backgroundColor: c }, skinColor === c && styles.colorBtnActive]} onPress={() => setSkinColor(c)} />
-              ))}
+            
+            {/* Thought */}
+            {character.thoughts && character.thoughts.length > 0 && (
+              <View style={styles.thoughtCard}>
+                <Text style={styles.thoughtCardText}>💭 "{character.thoughts[character.thoughts.length - 1]}"</Text>
+              </View>
+            )}
+            
+            {/* Needs */}
+            <Text style={styles.sectionTitle}>Needs</Text>
+            <View style={styles.needsGrid}>
+              {Object.entries(needs).map(([key, value]) => {
+                const icons: Record<string, string> = {
+                  hunger: '🍔', energy: '⚡', social: '💬', hygiene: '🚿', fun: '🎮', bladder: '🚽', comfort: '🛋️'
+                };
+                const v = value as number;
+                return (
+                  <View key={key} style={styles.needCard}>
+                    <Text style={styles.needIcon}>{icons[key] || '❓'}</Text>
+                    <View style={styles.needBarBg}>
+                      <View style={[styles.needBarFill, { width: `${v}%`, backgroundColor: v < 30 ? '#F44' : v < 50 ? '#F90' : '#4C5' }]} />
+                    </View>
+                    <Text style={styles.needValue}>{Math.round(v)}%</Text>
+                  </View>
+                );
+              })}
             </View>
-            <Text style={styles.subLabel}>Hair</Text>
-            <View style={styles.colorRow}>
-              {hairColors.map(c => (
-                <TouchableOpacity key={c} style={[styles.colorBtn, { backgroundColor: c }, hairColor === c && styles.colorBtnActive]} onPress={() => setHairColor(c)} />
-              ))}
-            </View>
-
+            
             {/* Attributes */}
-            <Text style={styles.sectionLabel}>⭐ {t.attributes || 'Attributes'}</Text>
-            <AttributeSlider label={t.intelligence || "Intelligence"} value={intelligence} setValue={setIntelligence} emoji="🧠" />
-            <AttributeSlider label={t.strength || "Strength"} value={strength} setValue={setStrength} emoji="💪" />
-            <AttributeSlider label={t.charisma || "Charisma"} value={charisma} setValue={setCharisma} emoji="🗣️" />
-            <AttributeSlider label={t.beauty || "Beauty"} value={beauty} setValue={setBeauty} emoji="✨" />
-            <AttributeSlider label={t.creativity || "Creativity"} value={creativity} setValue={setCreativity} emoji="🎨" />
-            <AttributeSlider label={t.luck || "Luck"} value={luck} setValue={setLuck} emoji="🍀" />
-
-            {/* Personality */}
-            <Text style={styles.sectionLabel}>🎭 Personality</Text>
-            <AttributeSlider label="Extroversion" value={extroversion} setValue={setExtroversion} emoji="🎉" />
-            <AttributeSlider label="Kindness" value={kindness} setValue={setKindness} emoji="💖" />
-            <AttributeSlider label="Humor" value={humor} setValue={setHumor} emoji="😂" />
-            <AttributeSlider label="Ambition" value={ambition} setValue={setAmbition} emoji="🚀" />
-
-            {/* Objectives */}
-            <Text style={styles.sectionLabel}>🎯 {t.objectives || 'Life Objectives'} (max 3)</Text>
-            <View style={styles.tagRow}>
-              {objectivesList.map(obj => (
-                <TouchableOpacity key={obj} style={[styles.tagBtn, objectives.includes(obj) && styles.tagBtnActive]} onPress={() => toggleItem(obj, objectives, setObjectives)}>
-                  <Text style={styles.tagText}>{obj.replace('_', ' ')}</Text>
-                </TouchableOpacity>
-              ))}
+            <Text style={styles.sectionTitle}>Attributes</Text>
+            <View style={styles.attrsGrid}>
+              {Object.entries(attrs).slice(0, 6).map(([key, value]) => {
+                const icons: Record<string, string> = {
+                  intelligence: '🧠', strength: '💪', charisma: '🗣️', beauty: '✨', creativity: '🎨', luck: '🍀'
+                };
+                return (
+                  <View key={key} style={styles.attrCard}>
+                    <Text style={styles.attrIcon}>{icons[key] || '⭐'}</Text>
+                    <Text style={styles.attrLabel}>{key}</Text>
+                    <Text style={styles.attrValue}>{Math.round(value as number)}</Text>
+                  </View>
+                );
+              })}
             </View>
-
-            {/* Hobbies */}
-            <Text style={styles.sectionLabel}>🎮 {t.hobbies || 'Hobbies'} (max 3)</Text>
-            <View style={styles.tagRow}>
-              {hobbiesList.map(h => (
-                <TouchableOpacity key={h} style={[styles.tagBtn, hobbies.includes(h) && styles.tagBtnActive]} onPress={() => toggleItem(h, hobbies, setHobbies)}>
-                  <Text style={styles.tagText}>{h}</Text>
-                </TouchableOpacity>
-              ))}
+            
+            {/* Money */}
+            <View style={styles.moneyCard}>
+              <Text style={styles.moneyIcon}>💰</Text>
+              <Text style={styles.moneyValue}>${character.money.toFixed(0)}</Text>
             </View>
-
-            <View style={{ height: 20 }} />
           </ScrollView>
-
-          <TouchableOpacity style={[styles.createButton, creating && styles.createButtonDisabled]} onPress={handleCreate} disabled={creating}>
-            {creating ? <ActivityIndicator color="#FFF" /> : <Text style={styles.createButtonText}>Create Character</Text>}
+          
+          <TouchableOpacity style={styles.travelButton} onPress={onTravel}>
+            <Ionicons name="airplane" size={20} color="#FFF" />
+            <Text style={styles.travelButtonText}>Travel</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -444,7 +485,7 @@ const CreateCharacterModal: React.FC<{
 };
 
 // Main App
-export default function LifeApp() {
+export default function LifeSimulator() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
@@ -454,21 +495,18 @@ export default function LifeApp() {
   const [isSimulating, setIsSimulating] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [autoSimulate, setAutoSimulate] = useState(true);
+  const [speed, setSpeed] = useState(1);
   const [language, setLanguage] = useState('en');
-  const [user, setUser] = useState<any>(null);
-
-  const t = useTranslations(language);
 
   const fetchData = useCallback(async () => {
     try {
       const [charsRes, locsRes, logsRes, worldRes] = await Promise.all([
         axios.get(`${API_BASE}/api/characters`),
         axios.get(`${API_BASE}/api/locations`),
-        axios.get(`${API_BASE}/api/logs?limit=15`),
+        axios.get(`${API_BASE}/api/logs?limit=10`),
         axios.get(`${API_BASE}/api/world`),
       ]);
       setCharacters(charsRes.data);
@@ -483,26 +521,17 @@ export default function LifeApp() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-    // Check auth
-    if (Platform.OS === 'web') {
-      const token = localStorage.getItem('auth_token');
-      if (token) {
-        axios.get(`${API_BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
-          .then(r => setUser(r.data)).catch(() => {});
-      }
-    }
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Auto-simulate
+  // Auto-simulate based on speed
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | undefined;
     if (autoSimulate && !isPaused) {
-      interval = setInterval(simulateTick, 4000);
+      const ms = Math.max(1500, 5000 / speed);
+      interval = setInterval(simulateTick, ms);
     }
     return () => { if (interval) clearInterval(interval); };
-  }, [autoSimulate, isPaused]);
+  }, [autoSimulate, isPaused, speed]);
 
   const simulateTick = async () => {
     if (isSimulating || isPaused) return;
@@ -525,23 +554,8 @@ export default function LifeApp() {
   const moveCharacter = async (characterId: string, locationId: string) => {
     await axios.post(`${API_BASE}/api/characters/${characterId}/move?location_id=${locationId}`);
     await fetchData();
-    setShowLocationPicker(false);
     setCurrentLocationId(locationId);
-  };
-
-  const walkCharacter = async (characterId: string, x: number, y: number) => {
-    await axios.post(`${API_BASE}/api/characters/${characterId}/walk?target_x=${x}&target_y=${y}`);
-  };
-
-  const handleWorldTap = (x: number, y: number) => {
-    if (selectedCharacter && selectedCharacter.location_id === currentLocationId) {
-      walkCharacter(selectedCharacter.id, x, y);
-    }
-  };
-
-  const loginWithGoogle = () => {
-    const redirectUrl = Platform.OS === 'web' ? window.location.origin + '/' : '';
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+    setSelectedCharacter(null);
   };
 
   const currentLocation = locations.find(l => l.id === currentLocationId);
@@ -550,8 +564,12 @@ export default function LifeApp() {
     return (
       <View style={styles.loadingContainer}>
         <LinearGradient colors={['#0f0c29', '#302b63', '#24243e']} style={StyleSheet.absoluteFill} />
-        <ActivityIndicator size="large" color="#00D4FF" />
-        <Text style={styles.loadingText}>Loading Life...</Text>
+        <View style={styles.loadingContent}>
+          <Text style={styles.loadingEmoji}>🎮</Text>
+          <Text style={styles.loadingTitle}>Life</Text>
+          <Text style={styles.loadingSubtitle}>Virtual God Simulator</Text>
+          <ActivityIndicator size="large" color="#00D4FF" style={{ marginTop: 20 }} />
+        </View>
       </View>
     );
   }
@@ -563,189 +581,141 @@ export default function LifeApp() {
       
       {/* Header */}
       <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Life</Text>
-          <Text style={styles.subtitle}>Free AI Simulator</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerTitle}>Life</Text>
+          <Text style={styles.headerSubtitle}>God Simulator</Text>
         </View>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity style={[styles.headerBtn, autoSimulate && styles.headerBtnActive]} onPress={() => setAutoSimulate(!autoSimulate)}>
-            <Ionicons name={autoSimulate ? "sync" : "sync-outline"} size={18} color="#FFF" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.headerBtn, isPaused && styles.headerBtnPaused]} onPress={togglePause}>
-            <Ionicons name={isPaused ? "play" : "pause"} size={18} color="#FFF" />
-          </TouchableOpacity>
+        <View style={styles.headerRight}>
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowSettings(true)}>
-            <Ionicons name="settings-outline" size={18} color="#FFF" />
+            <Ionicons name="settings-outline" size={22} color="#FFF" />
           </TouchableOpacity>
         </View>
       </View>
 
-      <ScrollView style={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#00D4FF" />}>
-        {/* World View */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🌍 World</Text>
-            <TouchableOpacity onPress={() => setShowLocationPicker(true)}>
-              <Ionicons name="map-outline" size={22} color="#00D4FF" />
-            </TouchableOpacity>
-          </View>
-          <WorldView
-            characters={characters}
-            currentLocation={currentLocation || null}
-            onCharacterPress={setSelectedCharacter}
-            onWorldTap={handleWorldTap}
-          />
-        </View>
-
-        {/* Location Tabs */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.locationTabs}>
-          {locations.slice(0, 8).map(loc => (
-            <TouchableOpacity key={loc.id} style={[styles.locationTab, currentLocationId === loc.id && styles.locationTabActive]} onPress={() => setCurrentLocationId(loc.id)}>
-              <Text style={styles.locationTabEmoji}>{loc.emoji}</Text>
-              <Text style={styles.locationTabName}>{loc.city}</Text>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#00D4FF" />}
+      >
+        {/* Isometric World View */}
+        <IsometricWorld
+          characters={characters}
+          location={currentLocation || null}
+          onCharacterPress={setSelectedCharacter}
+          onLocationChange={() => setShowLocationPicker(true)}
+        />
+        
+        {/* God Control Panel */}
+        <GodControlPanel
+          onSimulate={simulateTick}
+          onPause={togglePause}
+          onSpeedChange={setSpeed}
+          isPaused={isPaused}
+          isSimulating={isSimulating}
+          autoSimulate={autoSimulate}
+          onAutoToggle={() => setAutoSimulate(!autoSimulate)}
+          speed={speed}
+        />
+        
+        {/* Quick Location Tabs */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.quickLocations}>
+          {locations.slice(0, 20).map(loc => (
+            <TouchableOpacity 
+              key={loc.id} 
+              style={[styles.quickLocBtn, currentLocationId === loc.id && styles.quickLocBtnActive]}
+              onPress={() => setCurrentLocationId(loc.id)}
+            >
+              <Text style={styles.quickLocEmoji}>{loc.emoji}</Text>
+              <Text style={styles.quickLocText}>{loc.city}</Text>
             </TouchableOpacity>
           ))}
-        </ScrollView>
-
-        {/* Action Buttons */}
-        <View style={styles.actionRow}>
-          <TouchableOpacity style={[styles.simBtn, (isSimulating || isPaused) && styles.simBtnDisabled]} onPress={simulateTick} disabled={isSimulating || isPaused}>
-            {isSimulating ? <ActivityIndicator size="small" color="#FFF" /> : <><Ionicons name="sparkles" size={18} color="#FFF" /><Text style={styles.simBtnText}>{t.simulate || 'Simulate'}</Text></>}
+          <TouchableOpacity style={styles.quickLocBtnMore} onPress={() => setShowLocationPicker(true)}>
+            <Ionicons name="add" size={20} color="#FFF" />
+            <Text style={styles.quickLocText}>More</Text>
           </TouchableOpacity>
-          {user ? (
-            <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreateModal(true)}>
-              <Ionicons name="person-add" size={18} color="#FFF" /><Text style={styles.createBtnText}>Create</Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.loginBtn} onPress={loginWithGoogle}>
-              <Ionicons name="logo-google" size={18} color="#FFF" /><Text style={styles.loginBtnText}>Login</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Characters List */}
+        </ScrollView>
+        
+        {/* Character List */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>👥 Characters</Text>
+          <Text style={styles.sectionHeader}>👥 All Characters</Text>
           {characters.map(char => (
-            <TouchableOpacity key={char.id} style={[styles.charCard, selectedCharacter?.id === char.id && styles.charCardSelected]} onPress={() => setSelectedCharacter(selectedCharacter?.id === char.id ? null : char)}>
-              <View style={styles.charRow}>
-                <View style={[styles.charAvatar, { backgroundColor: char.appearance?.skin_color || '#F5D0C5' }]}>
-                  <Text style={styles.charEmoji}>{char.avatar_emoji}</Text>
-                </View>
-                <View style={styles.charInfo}>
-                  <Text style={styles.charName}>{char.name}</Text>
-                  <Text style={styles.charDetails}>{char.occupation}, {char.age} - {char.mood}</Text>
-                  <Text style={styles.charAction}>{char.current_action}</Text>
-                </View>
-                {!char.is_npc && <View style={styles.youBadge}><Text style={styles.youText}>YOU</Text></View>}
+            <TouchableOpacity 
+              key={char.id} 
+              style={styles.charListItem}
+              onPress={() => setSelectedCharacter(char)}
+            >
+              <View style={[styles.charListAvatar, { backgroundColor: char.appearance?.skin_color || '#F5D0C5' }]}>
+                <Text style={styles.charListEmoji}>{char.avatar_emoji}</Text>
               </View>
-
-              {selectedCharacter?.id === char.id && (
-                <View style={styles.charExpanded}>
-                  {/* Needs */}
-                  <View style={styles.needsGrid}>
-                    {Object.entries(char.needs || {}).map(([k, v]) => (
-                      <View key={k} style={styles.needItem}>
-                        <Text style={styles.needLabel}>{k}</Text>
-                        <View style={styles.needBar}><View style={[styles.needFill, { width: `${v}%`, backgroundColor: v < 30 ? '#F44' : v < 50 ? '#F90' : '#4C5' }]} /></View>
-                        <Text style={styles.needVal}>{Math.round(v)}%</Text>
-                      </View>
-                    ))}
-                  </View>
-                  
-                  {/* Attributes */}
-                  {char.attributes && (
-                    <View style={styles.attrSection}>
-                      <Text style={styles.attrTitle}>Attributes</Text>
-                      <View style={styles.attrGrid}>
-                        {Object.entries(char.attributes).slice(0, 6).map(([k, v]) => (
-                          <View key={k} style={styles.attrItem}>
-                            <Text style={styles.attrLabel}>{k}</Text>
-                            <Text style={styles.attrVal}>{Math.round(v as number)}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  )}
-
-                  {/* Thought */}
-                  {char.thoughts.length > 0 && (
-                    <View style={styles.thoughtBox}>
-                      <Text style={styles.thoughtText}>{`💭 "${char.thoughts[char.thoughts.length - 1]}"`}</Text>
-                    </View>
-                  )}
-
-                  <View style={styles.charActions}>
-                    <TouchableOpacity style={styles.travelBtn} onPress={() => { setSelectedCharacter(char); setShowLocationPicker(true); }}>
-                      <Ionicons name="airplane" size={14} color="#FFF" /><Text style={styles.travelText}>Travel</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.moneyText}>💰 ${char.money}</Text>
-                  </View>
-                </View>
-              )}
+              <View style={styles.charListInfo}>
+                <Text style={styles.charListName}>{char.name}</Text>
+                <Text style={styles.charListDetails}>{char.occupation} • {char.mood}</Text>
+                <Text style={styles.charListAction}>{char.current_action}</Text>
+              </View>
+              <View style={styles.charListLocation}>
+                <Text style={styles.charListLocEmoji}>{locations.find(l => l.id === char.location_id)?.emoji || '🌍'}</Text>
+              </View>
             </TouchableOpacity>
           ))}
         </View>
-
+        
         {/* Activity Log */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📋 Activity</Text>
-          <View style={styles.logsBox}>
-            {logs.slice(0, 8).map((log, i) => (
+          <Text style={styles.sectionHeader}>📜 Recent Activity</Text>
+          <View style={styles.logContainer}>
+            {logs.slice(0, 6).map((log, i) => (
               <View key={log.id || i} style={styles.logItem}>
                 <Text style={styles.logChar}>{log.character_name}</Text>
                 <Text style={styles.logAction}>{log.action}</Text>
-                {log.thought && <Text style={styles.logThought}>{`"${log.thought}"`}</Text>}
+                {log.thought && <Text style={styles.logThought}>"{log.thought}"</Text>}
               </View>
             ))}
           </View>
         </View>
-
+        
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Location Picker */}
-      <Modal visible={showLocationPicker} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.pickerModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Travel</Text>
-              <TouchableOpacity onPress={() => setShowLocationPicker(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
-            </View>
-            <ScrollView>
-              {locations.map(loc => (
-                <TouchableOpacity key={loc.id} style={[styles.locItem, currentLocationId === loc.id && styles.locItemActive]} onPress={() => selectedCharacter ? moveCharacter(selectedCharacter.id, loc.id) : setCurrentLocationId(loc.id) || setShowLocationPicker(false)}>
-                  <Text style={styles.locEmoji}>{loc.emoji}</Text>
-                  <View style={styles.locInfo}><Text style={styles.locName}>{loc.name}</Text><Text style={styles.locCity}>{loc.city}</Text></View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Settings */}
+      {/* Modals */}
+      <LocationSelector
+        visible={showLocationPicker}
+        locations={locations}
+        currentId={currentLocationId}
+        onSelect={setCurrentLocationId}
+        onClose={() => setShowLocationPicker(false)}
+      />
+      
+      <CharacterDetailModal
+        character={selectedCharacter}
+        onClose={() => setSelectedCharacter(null)}
+        onTravel={() => {
+          if (selectedCharacter) {
+            setShowLocationPicker(true);
+          }
+        }}
+      />
+      
+      {/* Settings Modal */}
       <Modal visible={showSettings} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.settingsModal}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Settings</Text>
-              <TouchableOpacity onPress={() => setShowSettings(false)}><Ionicons name="close" size={24} color="#FFF" /></TouchableOpacity>
+              <Text style={styles.modalTitle}>⚙️ Settings</Text>
+              <TouchableOpacity onPress={() => setShowSettings(false)}>
+                <Ionicons name="close" size={24} color="#FFF" />
+              </TouchableOpacity>
             </View>
             <Text style={styles.settingLabel}>Language</Text>
             <View style={styles.langRow}>
-              {[{c:'en',f:'🇬🇧',n:'English'},{c:'fr',f:'🇫🇷',n:'Français'},{c:'es',f:'🇪🇸',n:'Español'},{c:'de',f:'🇩🇪',n:'Deutsch'}].map(l => (
+              {[{c:'en',f:'🇬🇧'},{c:'fr',f:'🇫🇷'},{c:'es',f:'🇪🇸'},{c:'de',f:'🇩🇪'}].map(l => (
                 <TouchableOpacity key={l.c} style={[styles.langBtn, language === l.c && styles.langBtnActive]} onPress={() => setLanguage(l.c)}>
-                  <Text style={styles.langFlag}>{l.f}</Text><Text style={styles.langName}>{l.n}</Text>
+                  <Text style={styles.langFlag}>{l.f}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-            {user && <Text style={styles.userEmail}>{user.email}</Text>}
           </View>
         </View>
       </Modal>
-
-      <CreateCharacterModal visible={showCreateModal} onClose={() => setShowCreateModal(false)} onCreated={fetchData} t={t} />
     </SafeAreaView>
   );
 }
@@ -753,159 +723,163 @@ export default function LifeApp() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#FFF', fontSize: 18, marginTop: 16 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
-  title: { fontSize: 26, fontWeight: 'bold', color: '#00D4FF' },
-  subtitle: { fontSize: 11, color: 'rgba(255,255,255,0.6)' },
-  headerButtons: { flexDirection: 'row', gap: 6 },
-  headerBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
-  headerBtnActive: { backgroundColor: '#00D4FF' },
-  headerBtnPaused: { backgroundColor: '#F44' },
+  loadingContent: { alignItems: 'center' },
+  loadingEmoji: { fontSize: 60 },
+  loadingTitle: { fontSize: 42, fontWeight: 'bold', color: '#00D4FF', marginTop: 10 },
+  loadingSubtitle: { fontSize: 16, color: 'rgba(255,255,255,0.6)' },
+  
+  // Header
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 },
+  headerLeft: {},
+  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#00D4FF' },
+  headerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
+  headerRight: { flexDirection: 'row', gap: 8 },
+  headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  
   content: { flex: 1 },
-  section: { padding: 16 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#FFF' },
   
-  // World View
-  worldView: { borderRadius: 16, position: 'relative' },
-  worldHeader: { position: 'absolute', top: 8, left: 10, zIndex: 10 },
-  worldEmoji: { fontSize: 20 },
-  worldName: { color: '#333', fontSize: 12, fontWeight: '600' },
-  worldCity: { color: '#555', fontSize: 10 },
-  ground: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 35, backgroundColor: '#8B4513' },
-  groundGrass: { height: 8, backgroundColor: '#228B22' },
-  charCount: { position: 'absolute', top: 8, right: 10, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
-  charCountText: { color: '#FFF', fontSize: 11, marginLeft: 4 },
+  // Isometric World
+  isometricWorld: { marginHorizontal: 10, borderRadius: 20, overflow: 'hidden', position: 'relative' },
+  sky: { position: 'absolute', top: 0, left: 0, right: 0, height: '70%' },
+  celestialBody: { position: 'absolute', top: 15, right: 25 },
+  celestialEmoji: { fontSize: 32 },
   cloud: { position: 'absolute' },
-  cloudEmoji: { fontSize: 28, opacity: 0.7 },
-  worldObject: { position: 'absolute', fontSize: 28 },
-  tapInstruction: { position: 'absolute', bottom: 40, left: 0, right: 0, alignItems: 'center' },
-  tapText: { color: 'rgba(0,0,0,0.4)', fontSize: 10 },
-  emptyLocation: { position: 'absolute', top: '50%', left: 0, right: 0, alignItems: 'center' },
-  emptyText: { color: 'rgba(0,0,0,0.4)', fontSize: 12 },
+  cloudText: { fontSize: 28, opacity: 0.8 },
+  locationHeader: { position: 'absolute', top: 12, left: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12, zIndex: 50 },
+  locationFlag: { marginRight: 8 },
+  locationEmoji: { fontSize: 24 },
+  locationInfo: {},
+  locationName: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  locationCity: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
+  ground: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '35%' },
+  groundPattern: { position: 'absolute', top: 0, left: 0, right: 0, height: 5, backgroundColor: 'rgba(0,0,0,0.1)' },
+  decorObject: { position: 'absolute', fontSize: 32, zIndex: 5 },
+  emptyWorld: { position: 'absolute', top: '40%', left: 0, right: 0, alignItems: 'center' },
+  emptyText: { fontSize: 20, color: 'rgba(255,255,255,0.8)' },
+  emptySubtext: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4 },
+  charCounter: { position: 'absolute', top: 12, right: 12, flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  charCounterText: { color: '#FFF', fontSize: 14, fontWeight: '600', marginLeft: 5 },
   
-  // Character Sprite
-  characterSprite: { position: 'absolute', alignItems: 'center', zIndex: 5 },
-  spriteBody: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 3 },
-  spriteEmoji: { fontSize: 22 },
-  spriteNameTag: { backgroundColor: 'rgba(0,0,0,0.7)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, marginTop: 2 },
-  spriteNameText: { color: '#FFF', fontSize: 9, fontWeight: '600' },
-  walkingDots: { flexDirection: 'row', position: 'absolute', bottom: -8 },
-  walkDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#00D4FF', marginHorizontal: 1 },
-  walkDot1: { opacity: 0.3 },
-  walkDot2: { opacity: 0.6 },
-  walkDot3: { opacity: 1 },
-  thoughtBubble: { position: 'absolute', top: -15, right: -10 },
-  thoughtEmoji: { fontSize: 14 },
-  actionBubble: { position: 'absolute', top: -25, left: -10, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4 },
-  actionText: { color: '#FFF', fontSize: 7, fontWeight: '600' },
+  // Walking Character
+  walkingCharacter: { position: 'absolute', alignItems: 'center' },
+  characterShadow: { position: 'absolute', bottom: -5, width: 30, height: 8, backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 15 },
+  characterBody: { width: 50, height: 50, borderRadius: 25, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#FFF', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 5 },
+  characterHair: { position: 'absolute', top: -5, width: 40, height: 18, borderTopLeftRadius: 20, borderTopRightRadius: 20 },
+  characterFaceEmoji: { fontSize: 26 },
+  moodDot: { position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: 7, borderWidth: 2, borderColor: '#FFF' },
+  nameTag: { backgroundColor: 'rgba(0,0,0,0.75)', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginTop: 4 },
+  nameTagText: { color: '#FFF', fontSize: 10, fontWeight: '600' },
+  actionBubble: { position: 'absolute', top: -30, left: -20, backgroundColor: '#00D4FF', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
+  actionBubbleText: { color: '#FFF', fontSize: 8, fontWeight: '600' },
+  walkingLegs: { flexDirection: 'row', position: 'absolute', bottom: -8 },
+  leg: { width: 6, height: 12, backgroundColor: '#555', borderRadius: 3, marginHorizontal: 2 },
+  leftLeg: {},
+  rightLeg: {},
+  thoughtCloud: { position: 'absolute', top: -20, right: -15 },
+  thoughtCloudText: { fontSize: 16 },
   
-  // Location Tabs
-  locationTabs: { paddingHorizontal: 12, marginBottom: 8 },
-  locationTab: { paddingHorizontal: 14, paddingVertical: 8, marginRight: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16, alignItems: 'center' },
-  locationTabActive: { backgroundColor: '#00D4FF' },
-  locationTabEmoji: { fontSize: 18 },
-  locationTabName: { color: '#FFF', fontSize: 10, marginTop: 2 },
+  // God Control Panel
+  godPanel: { margin: 10, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 16, padding: 12 },
+  godPanelHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  godPanelTitle: { color: '#FFD700', fontSize: 14, fontWeight: '700', flex: 1 },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+  controlsRow: { flexDirection: 'row', gap: 8 },
+  controlBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00D4FF', paddingVertical: 12, borderRadius: 10, gap: 6 },
+  controlBtnActive: { backgroundColor: '#0099CC' },
+  controlBtnSecondary: { backgroundColor: '#6B7280' },
+  controlBtnDanger: { backgroundColor: '#F44336' },
+  controlBtnSmall: { flex: 0.6 },
+  controlBtnText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
+  controlBtnTextSmall: { color: '#FFF', fontWeight: '600', fontSize: 11 },
+  speedRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 8 },
+  speedLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+  speedBtn: { paddingHorizontal: 14, paddingVertical: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8 },
+  speedBtnActive: { backgroundColor: '#00D4FF' },
+  speedBtnText: { color: '#FFF', fontSize: 12, fontWeight: '600' },
   
-  // Action Buttons
-  actionRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 10 },
-  simBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00D4FF', paddingVertical: 12, borderRadius: 10, gap: 6 },
-  simBtnDisabled: { backgroundColor: '#555' },
-  simBtnText: { color: '#FFF', fontWeight: '700' },
-  createBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4CAF50', paddingVertical: 12, borderRadius: 10, gap: 6 },
-  createBtnText: { color: '#FFF', fontWeight: '700' },
-  loginBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#EA4335', paddingVertical: 12, borderRadius: 10, gap: 6 },
-  loginBtnText: { color: '#FFF', fontWeight: '700' },
+  // Quick Locations
+  quickLocations: { paddingHorizontal: 10, paddingVertical: 8 },
+  quickLocBtn: { alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, marginRight: 8 },
+  quickLocBtnActive: { backgroundColor: '#00D4FF' },
+  quickLocBtnMore: { alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)', borderStyle: 'dashed' },
+  quickLocEmoji: { fontSize: 22 },
+  quickLocText: { color: '#FFF', fontSize: 10, marginTop: 2 },
   
-  // Character Card
-  charCard: { backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, padding: 10, marginBottom: 8 },
-  charCardSelected: { borderWidth: 2, borderColor: '#00D4FF' },
-  charRow: { flexDirection: 'row', alignItems: 'center' },
-  charAvatar: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  charEmoji: { fontSize: 22 },
-  charInfo: { flex: 1, marginLeft: 10 },
-  charName: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-  charDetails: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
-  charAction: { color: '#00D4FF', fontSize: 11 },
-  youBadge: { backgroundColor: '#4C5', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
-  youText: { color: '#FFF', fontSize: 9, fontWeight: '700' },
-  charExpanded: { marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.1)' },
-  needsGrid: { gap: 4 },
-  needItem: { flexDirection: 'row', alignItems: 'center' },
-  needLabel: { width: 55, color: 'rgba(255,255,255,0.6)', fontSize: 10 },
-  needBar: { flex: 1, height: 5, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 2, marginHorizontal: 6 },
-  needFill: { height: '100%', borderRadius: 2 },
-  needVal: { width: 30, color: '#FFF', fontSize: 10, textAlign: 'right' },
-  attrSection: { marginTop: 8 },
-  attrTitle: { color: 'rgba(255,255,255,0.7)', fontSize: 11, marginBottom: 4 },
-  attrGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  attrItem: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, flexDirection: 'row', gap: 4 },
-  attrLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9 },
-  attrVal: { color: '#00D4FF', fontSize: 9, fontWeight: '600' },
-  thoughtBox: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 8, borderRadius: 6, marginTop: 8 },
-  thoughtText: { color: 'rgba(255,255,255,0.8)', fontSize: 11, fontStyle: 'italic' },
-  charActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
-  travelBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#00D4FF', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, gap: 4 },
-  travelText: { color: '#FFF', fontWeight: '600', fontSize: 12 },
-  moneyText: { color: '#FFD700', fontWeight: '600' },
+  // Section
+  section: { margin: 10 },
+  sectionHeader: { color: '#FFF', fontSize: 16, fontWeight: '700', marginBottom: 10 },
   
-  // Logs
-  logsBox: { backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 10, padding: 10 },
-  logItem: { paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
+  // Character List
+  charListItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 12, marginBottom: 8 },
+  charListAvatar: { width: 46, height: 46, borderRadius: 23, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFF' },
+  charListEmoji: { fontSize: 24 },
+  charListInfo: { flex: 1, marginLeft: 12 },
+  charListName: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+  charListDetails: { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
+  charListAction: { color: '#00D4FF', fontSize: 11, marginTop: 2 },
+  charListLocation: {},
+  charListLocEmoji: { fontSize: 22 },
+  
+  // Log
+  logContainer: { backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: 12, padding: 10 },
+  logItem: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   logChar: { color: '#00D4FF', fontSize: 12, fontWeight: '600' },
   logAction: { color: '#FFF', fontSize: 11 },
-  logThought: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontStyle: 'italic' },
+  logThought: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontStyle: 'italic', marginTop: 2 },
   
   // Modals
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'flex-end' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.1)' },
   modalTitle: { color: '#FFF', fontSize: 18, fontWeight: '700' },
-  pickerModal: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: height * 0.6, padding: 16 },
-  locItem: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10, marginBottom: 8 },
-  locItemActive: { borderWidth: 2, borderColor: '#00D4FF' },
-  locEmoji: { fontSize: 26 },
-  locInfo: { marginLeft: 12 },
-  locName: { color: '#FFF', fontSize: 14, fontWeight: '600' },
-  locCity: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
-  settingsModal: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16 },
-  settingLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 16, marginBottom: 8 },
-  langRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  langBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 6 },
-  langBtnActive: { backgroundColor: '#00D4FF' },
-  langFlag: { fontSize: 18 },
-  langName: { color: '#FFF', fontSize: 12 },
-  userEmail: { color: 'rgba(255,255,255,0.6)', marginTop: 20, textAlign: 'center' },
   
-  // Create Modal
-  createModal: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20, height: height * 0.9 },
-  createForm: { flex: 1, padding: 16 },
-  previewContainer: { alignItems: 'center', marginBottom: 16 },
-  previewAvatar: { width: 70, height: 70, borderRadius: 35, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#FFF' },
-  previewEmoji: { fontSize: 36 },
-  sectionLabel: { color: '#00D4FF', fontSize: 14, fontWeight: '600', marginTop: 16, marginBottom: 8 },
-  subLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 8, marginBottom: 4 },
-  textInput: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 8, padding: 12, color: '#FFF', marginBottom: 8 },
-  optionRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  optionBtn: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 },
-  optionBtnActive: { backgroundColor: '#00D4FF' },
-  optionEmoji: { fontSize: 24 },
-  colorRow: { flexDirection: 'row', gap: 8 },
-  colorBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'transparent' },
-  colorBtnActive: { borderColor: '#00D4FF' },
-  sliderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  sliderEmoji: { fontSize: 16, width: 24 },
-  sliderLabel: { width: 80, color: 'rgba(255,255,255,0.7)', fontSize: 11 },
-  sliderTrack: { flex: 1, height: 6, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 3, marginHorizontal: 6 },
-  sliderFill: { height: '100%', backgroundColor: '#00D4FF', borderRadius: 3 },
-  sliderButtons: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  sliderBtn: { width: 24, height: 24, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  sliderBtnText: { color: '#FFF', fontSize: 16, fontWeight: '600' },
-  sliderValue: { width: 28, color: '#FFF', fontSize: 11, textAlign: 'center' },
-  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  tagBtn: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 },
-  tagBtnActive: { backgroundColor: '#00D4FF' },
-  tagText: { color: '#FFF', fontSize: 11 },
-  createButton: { backgroundColor: '#00D4FF', margin: 16, paddingVertical: 14, borderRadius: 10, alignItems: 'center' },
-  createButtonDisabled: { backgroundColor: '#555' },
-  createButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  // Location Modal
+  locationModal: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: height * 0.75 },
+  locationList: { padding: 16 },
+  countryHeader: { color: '#00D4FF', fontSize: 14, fontWeight: '700', marginTop: 12, marginBottom: 8 },
+  locationOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 12, padding: 14, marginBottom: 8 },
+  locationOptionActive: { backgroundColor: 'rgba(0,212,255,0.2)', borderWidth: 1, borderColor: '#00D4FF' },
+  locationOptionEmoji: { fontSize: 28 },
+  locationOptionInfo: { flex: 1, marginLeft: 12 },
+  locationOptionName: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+  locationOptionCity: { color: 'rgba(255,255,255,0.6)', fontSize: 12 },
+  
+  // Character Modal
+  characterModal: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: height * 0.85 },
+  characterModalHeader: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  bigAvatar: { width: 60, height: 60, borderRadius: 30, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#FFF' },
+  bigAvatarEmoji: { fontSize: 32 },
+  characterMainInfo: { marginLeft: 12 },
+  characterModalName: { color: '#FFF', fontSize: 20, fontWeight: '700' },
+  characterModalJob: { color: 'rgba(255,255,255,0.7)', fontSize: 13 },
+  characterModalMood: { color: '#00D4FF', fontSize: 12, marginTop: 2 },
+  characterModalContent: { padding: 16 },
+  actionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,212,255,0.1)', padding: 12, borderRadius: 10, marginBottom: 12 },
+  actionCardText: { color: '#00D4FF', fontSize: 14, marginLeft: 8 },
+  thoughtCard: { backgroundColor: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 10, marginBottom: 16 },
+  thoughtCardText: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontStyle: 'italic' },
+  sectionTitle: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  needsGrid: { gap: 6, marginBottom: 16 },
+  needCard: { flexDirection: 'row', alignItems: 'center' },
+  needIcon: { width: 24, fontSize: 16 },
+  needBarBg: { flex: 1, height: 8, backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 4, marginHorizontal: 8 },
+  needBarFill: { height: '100%', borderRadius: 4 },
+  needValue: { width: 35, color: '#FFF', fontSize: 11, textAlign: 'right' },
+  attrsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
+  attrCard: { backgroundColor: 'rgba(255,255,255,0.05)', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, alignItems: 'center', minWidth: 70 },
+  attrIcon: { fontSize: 18 },
+  attrLabel: { color: 'rgba(255,255,255,0.6)', fontSize: 9, marginTop: 2 },
+  attrValue: { color: '#FFF', fontSize: 14, fontWeight: '700' },
+  moneyCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,215,0,0.1)', padding: 12, borderRadius: 10 },
+  moneyIcon: { fontSize: 24 },
+  moneyValue: { color: '#FFD700', fontSize: 24, fontWeight: '700', marginLeft: 8 },
+  travelButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00D4FF', margin: 16, padding: 14, borderRadius: 12, gap: 8 },
+  travelButtonText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+  
+  // Settings Modal
+  settingsModal: { backgroundColor: '#1a1a2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 16 },
+  settingLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 14, marginTop: 16, marginBottom: 8 },
+  langRow: { flexDirection: 'row', gap: 10 },
+  langBtn: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  langBtnActive: { backgroundColor: '#00D4FF' },
+  langFlag: { fontSize: 26 },
 });

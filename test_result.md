@@ -144,7 +144,7 @@ backend:
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: false
+    needs_retesting: true
     status_history:
         - working: true
         - agent: "main"
@@ -154,7 +154,10 @@ backend:
         - comment: "✅ PASSED - Returns all 8 locations: Le Petit Parisien (Paris cafe), Shibuya Apartment (Tokyo), Manhattan Tech Hub (NYC office), Hyde Park (London park), FitLife Barcelona (gym), Trattoria Da Nonna (Rome restaurant), Berghain Underground (Berlin club), Bondi Beach (Sydney). All locations have proper structure with id, name, description, type, city, country, emoji, and available_actions list."
         - working: true
         - agent: "testing"
-        - comment: "✅ PASSED - Returns 10 locations (not 8): Le Petit Parisien (Paris), Shibuya Apartment (Tokyo), Manhattan Tech Hub (NYC), Hyde Park (London), FitLife Barcelona, Trattoria Da Nonna (Rome), Berghain Underground (Berlin), Bondi Beach (Sydney), International School, City Hospital. All have proper structure."
+        - comment: "✅ PASSED - Returns 10 locations (not 8): Le Petit Parisien (Paris), Shibuya Apartment (Tokyo), Manhattan Tech Hub (NYC), Hyde Park (London), FitLife Barcelona, Trattoria Da Nonna (Rome), Berghain Underground (Berlin), Bondi Beach (Sydney), International School, City Hospital. All have proper structure.
+        - working: true
+        - agent: "main"
+        - comment: "EXPANDED to 30 locations across 28 countries. New: Dubai (mall), Rio (beach), Mumbai (market), Cairo (museum), Seoul (cinema), Kyoto (temple), Nepal (mountain), Amsterdam (park), Bangkok (market), Mexico City (cathedral), Cape Town (Table Mountain), Istanbul (bazaar), Toronto (office), Buenos Aires (tango club), Stockholm (park), Lisbon (cafe), Swiss Alps (mountain), Athens (Parthenon temple), Bali (beach), Moscow (Bolshoi theatre). Added @app.on_event('startup') upsert so existing DBs pick up new entries. Needs retest of /api/locations to confirm 30 locations."
 
   - task: "GET /api/world - Get world state"
     implemented: true

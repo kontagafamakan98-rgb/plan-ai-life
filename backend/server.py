@@ -405,7 +405,128 @@ DEFAULT_LOCATIONS = [
         type="hospital", city="Various", country="International", emoji="🏥",
         available_actions=["checkup", "visit_patient", "have_baby", "rest"],
         objects=["rooms", "pharmacy", "maternity_ward"]
-    )
+    ),
+    # ---- New countries / iconic landmarks (20+ countries world map) ----
+    Location(
+        id="dubai_mall", name="Dubai Mall", description="The world's largest shopping mall",
+        type="market", city="Dubai", country="UAE", emoji="🏬",
+        available_actions=["shopping", "watch_fountain", "luxury_dining", "skating", "people_watch"],
+        objects=["boutiques", "aquarium", "fountain", "food_court"], is_premium=True
+    ),
+    Location(
+        id="rio_beach", name="Copacabana Beach", description="Iconic Brazilian beach",
+        type="beach", city="Rio de Janeiro", country="Brazil", emoji="🏝️",
+        available_actions=["sunbathe", "samba_dance", "volleyball", "drink_caipirinha", "surf"],
+        objects=["sand", "kiosks", "umbrellas"]
+    ),
+    Location(
+        id="mumbai_market", name="Crawford Market", description="A bustling Indian bazaar",
+        type="market", city="Mumbai", country="India", emoji="🧺",
+        available_actions=["bargain", "buy_spices", "eat_street_food", "chai_break", "people_watch"],
+        objects=["stalls", "spices", "fabrics", "street_food"]
+    ),
+    Location(
+        id="cairo_museum", name="Egyptian Museum", description="Home to ancient pharaohs",
+        type="museum", city="Cairo", country="Egypt", emoji="🏛️",
+        available_actions=["admire_art", "study_history", "guided_tour", "photograph", "meditate"],
+        objects=["mummies", "sarcophagi", "papyrus", "artifacts"]
+    ),
+    Location(
+        id="seoul_cinema", name="CGV Yongsan", description="A massive Korean cinema complex",
+        type="cinema", city="Seoul", country="South Korea", emoji="🎬",
+        available_actions=["watch_movie", "eat_popcorn", "first_date", "discuss_film", "vr_experience"],
+        objects=["screens", "snack_bar", "vr_room"]
+    ),
+    Location(
+        id="kyoto_temple", name="Kinkaku-ji", description="The Golden Pavilion",
+        type="temple", city="Kyoto", country="Japan", emoji="⛩️",
+        available_actions=["meditate", "pray", "tea_ceremony", "garden_walk", "photograph"],
+        objects=["pagoda", "koi_pond", "bonsai", "incense"]
+    ),
+    Location(
+        id="himalaya_mountain", name="Everest Base Camp", description="The roof of the world",
+        type="mountain", city="Khumbu", country="Nepal", emoji="🏔️",
+        available_actions=["hike", "climb", "stargaze", "meditate", "yak_ride"],
+        objects=["tents", "prayer_flags", "yaks", "summit"], is_premium=True
+    ),
+    Location(
+        id="amsterdam_park", name="Vondelpark", description="The lungs of Amsterdam",
+        type="park", city="Amsterdam", country="Netherlands", emoji="🌷",
+        available_actions=["cycle", "picnic", "feed_swans", "rollerblade", "open_air_concert"],
+        objects=["canals", "tulips", "bikes", "windmill"]
+    ),
+    Location(
+        id="bangkok_market", name="Chatuchak Market", description="Asia's largest weekend market",
+        type="market", city="Bangkok", country="Thailand", emoji="🍜",
+        available_actions=["eat_pad_thai", "haggle", "buy_silk", "drink_coconut", "explore"],
+        objects=["stalls", "street_food", "souvenirs"]
+    ),
+    Location(
+        id="mexico_cathedral", name="Metropolitan Cathedral", description="Heart of Mexico City",
+        type="temple", city="Mexico City", country="Mexico", emoji="⛪",
+        available_actions=["pray", "light_candle", "tour_architecture", "reflect", "confession"],
+        objects=["altars", "frescoes", "bells"]
+    ),
+    Location(
+        id="capetown_safari", name="Table Mountain", description="A South African natural wonder",
+        type="mountain", city="Cape Town", country="South Africa", emoji="🦁",
+        available_actions=["hike", "cable_car", "spot_wildlife", "photograph", "picnic"],
+        objects=["cable_car", "rocks", "viewpoint"]
+    ),
+    Location(
+        id="istanbul_bazaar", name="Grand Bazaar", description="A historic Turkish bazaar",
+        type="market", city="Istanbul", country="Turkey", emoji="🕌",
+        available_actions=["drink_tea", "buy_rugs", "haggle", "smoke_hookah", "eat_baklava"],
+        objects=["lamps", "carpets", "spices", "tea"]
+    ),
+    Location(
+        id="toronto_office", name="CN Tower Offices", description="A skyscraper office in Canada",
+        type="office", city="Toronto", country="Canada", emoji="🏙️",
+        available_actions=["work", "skyline_view", "coffee_break", "elevator_ride", "network"],
+        objects=["desks", "glass_floor", "telescope"]
+    ),
+    Location(
+        id="buenos_aires_club", name="Tango Milonga", description="A passionate tango club",
+        type="club", city="Buenos Aires", country="Argentina", emoji="💃",
+        available_actions=["dance_tango", "drink_malbec", "flirt", "live_music", "romance"],
+        objects=["dance_floor", "stage", "bar"]
+    ),
+    Location(
+        id="stockholm_park", name="Djurgården", description="A royal island of nature",
+        type="park", city="Stockholm", country="Sweden", emoji="❄️",
+        available_actions=["walk", "ski", "fika_break", "ice_skate", "spot_moose"],
+        objects=["forest", "lake", "deer"]
+    ),
+    Location(
+        id="lisbon_cafe", name="A Brasileira", description="A historic Portuguese cafe",
+        type="cafe", city="Lisbon", country="Portugal", emoji="🍷",
+        available_actions=["drink_espresso", "eat_pastel_de_nata", "read_poetry", "people_watch", "chat"],
+        objects=["pastries", "tiles", "patio"]
+    ),
+    Location(
+        id="alps_mountain", name="Matterhorn", description="The iconic Swiss Alps",
+        type="mountain", city="Zermatt", country="Switzerland", emoji="⛰️",
+        available_actions=["ski", "snowboard", "hike", "fondue_dinner", "stargaze"],
+        objects=["snow", "chalets", "cable_car"]
+    ),
+    Location(
+        id="athens_temple", name="Parthenon", description="An ancient Greek wonder",
+        type="temple", city="Athens", country="Greece", emoji="🏛️",
+        available_actions=["admire_history", "philosophize", "photograph", "study", "reflect"],
+        objects=["columns", "ruins", "view"]
+    ),
+    Location(
+        id="bali_beach", name="Kuta Beach", description="A tropical Indonesian paradise",
+        type="beach", city="Bali", country="Indonesia", emoji="🌴",
+        available_actions=["surf", "yoga_sunset", "drink_coconut", "scuba_dive", "spa"],
+        objects=["waves", "palms", "loungers"]
+    ),
+    Location(
+        id="moscow_museum", name="Bolshoi Theatre", description="A legendary Russian theatre",
+        type="museum", city="Moscow", country="Russia", emoji="🎭",
+        available_actions=["watch_ballet", "opera", "applaud", "champagne_intermission", "admire_art"],
+        objects=["stage", "balconies", "chandeliers"], is_premium=True
+    ),
 ]
 
 DEFAULT_NPCS = [
@@ -1271,6 +1392,21 @@ async def mock_subscribe(user: dict = Depends(get_current_user)):
 
 app.include_router(api_router)
 app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("startup")
+async def startup_seed_locations():
+    """Upsert all DEFAULT_LOCATIONS so existing databases pick up new countries."""
+    try:
+        for loc in DEFAULT_LOCATIONS:
+            await db.locations.update_one(
+                {"id": loc.id},
+                {"$set": loc.model_dump()},
+                upsert=True,
+            )
+        count = await db.locations.count_documents({})
+        logger.info(f"[startup] Locations seeded/upserted. Total: {count}")
+    except Exception as e:
+        logger.error(f"[startup] Failed to seed locations: {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
