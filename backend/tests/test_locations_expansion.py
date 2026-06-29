@@ -45,7 +45,7 @@ class TestLocationsExpansion:
         assert r.status_code == 200
         locs = r.json()
         assert isinstance(locs, list)
-        assert len(locs) == 30, f"Expected 30 locations, got {len(locs)}"
+        assert len(locs) == 31, f"Expected 31 locations (30 world + my_home), got {len(locs)}"
 
     def test_previous_ids_present(self, api_client):
         r = api_client.get(f"{API}/locations")
@@ -121,7 +121,7 @@ class TestReset:
         assert r.json().get("status") == "success"
 
         locs = api_client.get(f"{API}/locations").json()
-        assert len(locs) == 30, f"After reset got {len(locs)} locations"
+        assert len(locs) == 31, f"After reset got {len(locs)} locations"
 
         ids = {l["id"] for l in locs}
         assert PREVIOUS_IDS.issubset(ids), f"Missing legacy IDs after reset: {PREVIOUS_IDS - ids}"

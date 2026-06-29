@@ -527,7 +527,56 @@ DEFAULT_LOCATIONS = [
         available_actions=["watch_ballet", "opera", "applaud", "champagne_intermission", "admire_art"],
         objects=["stage", "balconies", "chandeliers"], is_premium=True
     ),
+    # User-owned buildable location
+    Location(
+        id="my_home", name="My Home", description="Your personal home you can fully customize",
+        type="apartment", city="Anywhere", country="Yours", emoji="🏡",
+        available_actions=["sleep", "cook_meal", "watch_tv", "take_shower", "use_toilet", "relax", "exercise", "play_games", "read", "host_party"],
+        objects=["sofa", "bed", "kitchen", "tv", "garden"]
+    ),
 ]
+
+# ==================== BUILDABLE OBJECTS CATALOG ====================
+BUILD_CATALOG = [
+    # Free items
+    {"id": "sofa", "name": "Sofa", "emoji": "🛋️", "category": "furniture", "size": 2, "cost": 100, "premium": False},
+    {"id": "bed", "name": "Bed", "emoji": "🛏️", "category": "furniture", "size": 2, "cost": 150, "premium": False},
+    {"id": "chair", "name": "Chair", "emoji": "🪑", "category": "furniture", "size": 1, "cost": 30, "premium": False},
+    {"id": "table", "name": "Table", "emoji": "🪟", "category": "furniture", "size": 2, "cost": 80, "premium": False},
+    {"id": "lamp", "name": "Lamp", "emoji": "💡", "category": "decor", "size": 1, "cost": 25, "premium": False},
+    {"id": "plant", "name": "Plant", "emoji": "🪴", "category": "decor", "size": 1, "cost": 20, "premium": False},
+    {"id": "tv", "name": "TV", "emoji": "📺", "category": "electronics", "size": 2, "cost": 250, "premium": False},
+    {"id": "kitchen", "name": "Kitchen", "emoji": "🍳", "category": "appliance", "size": 3, "cost": 500, "premium": False},
+    {"id": "bathroom", "name": "Bathroom", "emoji": "🚽", "category": "appliance", "size": 2, "cost": 350, "premium": False},
+    {"id": "bookshelf", "name": "Bookshelf", "emoji": "📚", "category": "furniture", "size": 1, "cost": 90, "premium": False},
+    {"id": "tree", "name": "Tree", "emoji": "🌳", "category": "outdoor", "size": 2, "cost": 50, "premium": False},
+    {"id": "flowers", "name": "Flowers", "emoji": "🌷", "category": "outdoor", "size": 1, "cost": 15, "premium": False},
+    {"id": "fence", "name": "Fence", "emoji": "🚧", "category": "outdoor", "size": 1, "cost": 40, "premium": False},
+    {"id": "rug", "name": "Rug", "emoji": "🟫", "category": "decor", "size": 2, "cost": 60, "premium": False},
+    # Premium items 👑
+    {"id": "pool", "name": "Swimming Pool", "emoji": "🏊", "category": "luxury", "size": 4, "cost": 2500, "premium": True},
+    {"id": "jacuzzi", "name": "Jacuzzi", "emoji": "🛁", "category": "luxury", "size": 2, "cost": 1500, "premium": True},
+    {"id": "piano", "name": "Grand Piano", "emoji": "🎹", "category": "luxury", "size": 3, "cost": 1800, "premium": True},
+    {"id": "fireplace", "name": "Fireplace", "emoji": "🔥", "category": "luxury", "size": 2, "cost": 900, "premium": True},
+    {"id": "aquarium", "name": "Aquarium", "emoji": "🐠", "category": "luxury", "size": 2, "cost": 1100, "premium": True},
+    {"id": "billiard", "name": "Billiard Table", "emoji": "🎱", "category": "luxury", "size": 3, "cost": 1200, "premium": True},
+    {"id": "bar", "name": "Home Bar", "emoji": "🍸", "category": "luxury", "size": 2, "cost": 1300, "premium": True},
+    {"id": "gym_equipment", "name": "Home Gym", "emoji": "🏋️", "category": "luxury", "size": 3, "cost": 1700, "premium": True},
+    {"id": "art", "name": "Modern Art", "emoji": "🖼️", "category": "luxury", "size": 1, "cost": 800, "premium": True},
+    {"id": "robot", "name": "Robot Butler", "emoji": "🤖", "category": "luxury", "size": 1, "cost": 3000, "premium": True},
+]
+
+# ==================== BUILDING (USER-PLACED ITEMS) ====================
+class BuildingItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str = "guest"
+    location_id: str = "my_home"
+    catalog_id: str
+    emoji: str
+    name: str
+    x: float  # grid x (0-100)
+    y: float  # grid y (0-100)
+    placed_at: datetime = Field(default_factory=datetime.utcnow)
 
 DEFAULT_NPCS = [
     Character(
@@ -975,19 +1024,22 @@ async def get_character(character_id: str):
 
 @api_router.post("/characters/create")
 async def create_character(data: CharacterCreate, user: dict = Depends(get_current_user)):
-    if not user:
-        raise HTTPException(status_code=401, detail="Must be logged in")
+    # Allow guest creation (no auth required) so the sandbox is immediately playable.
+    # If logged in, character is attached to the user.
+    user_id = user["id"] if user else f"guest_{uuid.uuid4().hex[:8]}"
     
     # Avatar based on age/gender
     if data.age < 3:
         avatar = "👶"
     elif data.age < 13:
         avatar = "👧" if data.gender == "female" else "👦"
-    else:
+    elif data.age < 60:
         avatar = "👩" if data.gender == "female" else ("👨" if data.gender == "male" else "🧑")
+    else:
+        avatar = "👵" if data.gender == "female" else "👴"
     
     character = Character(
-        user_id=user["id"],
+        user_id=user_id,
         name=data.name,
         age=data.age,
         gender=data.gender,
@@ -1019,13 +1071,14 @@ async def create_character(data: CharacterCreate, user: dict = Depends(get_curre
         objectives=data.objectives,
         hobbies=data.hobbies,
         is_npc=False,
-        location_id="tokyo_apartment",
+        location_id="my_home" if user else "paris_cafe",
         position_x=random.uniform(30, 70),
         position_y=random.uniform(30, 70)
     )
     
     await db.characters.insert_one(character.model_dump())
-    await db.users.update_one({"id": user["id"]}, {"$push": {"characters": character.id}})
+    if user:
+        await db.users.update_one({"id": user["id"]}, {"$push": {"characters": character.id}})
     
     return serialize_doc(character.model_dump())
 
@@ -1373,6 +1426,62 @@ async def cancel_subscription(user: dict = Depends(get_current_user)):
         return {"status": "cancelled", "message": "Subscription cancelled successfully"}
     except stripe.error.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+# ==================== BUILD MODE ====================
+@api_router.get("/build/catalog")
+async def get_build_catalog():
+    """List all objects that can be placed in build mode."""
+    return BUILD_CATALOG
+
+@api_router.get("/build/items")
+async def get_user_buildings(user: dict = Depends(get_current_user), location_id: str = "my_home"):
+    """List items the user has placed in a given location."""
+    user_id = user["id"] if user else "guest"
+    items = await db.buildings.find({"user_id": user_id, "location_id": location_id}).to_list(500)
+    return serialize_doc(items)
+
+@api_router.post("/build/place")
+async def place_building_item(payload: Dict, user: dict = Depends(get_current_user)):
+    """Place an item from the catalog onto the user's grid."""
+    catalog_id = payload.get("catalog_id")
+    x = float(payload.get("x", 50))
+    y = float(payload.get("y", 50))
+    location_id = payload.get("location_id", "my_home")
+    
+    catalog_item = next((c for c in BUILD_CATALOG if c["id"] == catalog_id), None)
+    if not catalog_item:
+        raise HTTPException(status_code=404, detail="Catalog item not found")
+    
+    # Premium gating
+    if catalog_item["premium"] and (not user or not user.get("is_premium")):
+        raise HTTPException(status_code=402, detail=f"'{catalog_item['name']}' is a Premium item. Upgrade to unlock.")
+    
+    user_id = user["id"] if user else "guest"
+    item = BuildingItem(
+        user_id=user_id,
+        location_id=location_id,
+        catalog_id=catalog_id,
+        emoji=catalog_item["emoji"],
+        name=catalog_item["name"],
+        x=max(5, min(95, x)),
+        y=max(5, min(95, y)),
+    )
+    await db.buildings.insert_one(item.model_dump())
+    return serialize_doc(item.model_dump())
+
+@api_router.delete("/build/items/{item_id}")
+async def remove_building_item(item_id: str, user: dict = Depends(get_current_user)):
+    user_id = user["id"] if user else "guest"
+    result = await db.buildings.delete_one({"id": item_id, "user_id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"status": "deleted"}
+
+@api_router.post("/build/clear")
+async def clear_user_buildings(user: dict = Depends(get_current_user), location_id: str = "my_home"):
+    user_id = user["id"] if user else "guest"
+    result = await db.buildings.delete_many({"user_id": user_id, "location_id": location_id})
+    return {"status": "cleared", "removed": result.deleted_count}
 
 # Mock payment for testing without real Stripe
 @api_router.post("/stripe/mock-subscribe")

@@ -1,0 +1,45 @@
+{
+  "summary": "Backend tests for new Build Mode + Guest Character Creation features all pass (20/20 new + 20/20 regression = 40/40 = 100%). Verified: (1) GET /api/locations returns exactly 31 incl. my_home; (2) GET /api/build/catalog returns 24 items (14 free + 10 premium) with required fields id/name/emoji/category/size/cost/premium; (3) POST /api/build/place sofa (free) as guest → 200 with id; (4) POST /api/build/place pool (premium) without auth → 402; (5) POST /api/build/place unknown_id → 404; (6) GET /api/build/items?location_id=my_home lists placed sofa; (7) DELETE /api/build/items/{id} removes it and subsequent GET no longer contains it; (8) POST /api/build/clear?location_id=my_home returns {status:'cleared', removed:N}; (9) POST /api/characters/create with NO auth header succeeds (200) → is_npc=false, avatar_emoji=👩 (25/female), location_id='paris_cafe' (guest default), user_id starts with 'guest_'; (10) Regression: GET /api/characters still contains 3 NPCs (Sophie, Kenji, Marcus) + the new Luna, and POST /api/simulate still 200. Also updated test_locations_expansion.py count assertions from 30→31 to reflect the new my_home addition.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/locations & most list endpoints", "issue": "MongoDB '_id' (ObjectId stringified) leaks into all list responses. serialize_doc converts ObjectId to str instead of excluding the field. Per code-review guidelines, '_id' must always be excluded from API responses."},
+      {"endpoint": "POST /api/build/place (guest)", "issue": "All guest users share the literal user_id='guest', so anonymous users see each other's placed items. For sandbox this may be intentional, but it will cause cross-session bleeding (e.g., one guest sees another guest's sofa). Recommend using a per-session guest token (e.g., set/return a cookie or X-Guest-Id header) or scoping guest items to ephemeral sessions."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_build_and_guest.py",
+    "/app/backend/tests/test_locations_expansion.py",
+    "/app/backend/tests/conftest.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Update serialize_doc to drop the MongoDB '_id' field entirely (do `result.pop('_id', None)` or skip key=='_id') rather than stringifying it — currently leaks into /api/locations, /api/characters, /api/build/items, /api/logs, etc.",
+    "Decide whether guest build items should be per-session-scoped instead of all sharing user_id='guest' (current behavior allows guest A to see/delete guest B's items). If sandbox is intentional, document it; otherwise generate a guest_id cookie on first call.",
+    "Optional: split server.py (now 1523 lines) into modules — exceeds 700-line guideline. (Carried over from iteration_1.)",
+    "Optional: enable Stripe webhook signature verification before production (carried over from iteration_1)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1523 lines (+109 from iter_1) — still exceeds 700-line guideline. Consider extracting build/* routes into routes/build.py and the BUILD_CATALOG constant into data/build_catalog.py.",
+    "serialize_doc stringifies Mongo _id rather than excluding it; per guideline 'MongoDB ObjectId - Always exclude mongodb objectId _id'. Confirmed leaking via /api/locations response shape.",
+    "POST /api/build/place uses payload: Dict (raw) with no Pydantic validation. catalog_id/x/y/location_id should be typed via a BuildPlaceRequest BaseModel so invalid types return 422 instead of crashing on float() coercion.",
+    "Guest user_id is hardcoded to the literal string 'guest' for build endpoints — all anonymous users share the same bucket. Either persist a guest_id per session/cookie or document the sandbox-only behavior.",
+    "POST /api/characters/create as guest also doesn't gate quantity — a single anonymous client can spam unbounded character creation. Consider per-IP rate limit or per-guest cap."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_build_and_guest.py (new — 20 tests covering all build endpoints + guest character creation + regression)",
+    "/app/backend/tests/test_locations_expansion.py (updated count assertions 30 → 31 for added my_home location)"
+  ],
+  "success_rate": {"backend": "100% (40/40 — 20 new + 20 regression)", "frontend": "N/A (skipped per request)"},
+  "seed_data_creation": "Test creates a guest 'Luna' character and transient build items (sofa, lamp). Build items are cleared by the test itself via POST /api/build/clear. Luna persists in DB after the run (acceptable — used in regression check); pytest does not delete it because guest characters can't be deleted without auth.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/ -v --junitxml=/app/test_reports/pytest/pytest_results.xml. BASE_URL is read from frontend/.env -> EXPO_PUBLIC_BACKEND_URL. The DB now has guest characters from prior runs (1+ Luna chars with user_id starting with 'guest_'); /api/characters count drifts up by 1 each pytest run. If you need a clean baseline, POST /api/reset clears characters except seeded NPCs but does NOT clear db.buildings — clear that manually if needed. /api/build/place validates premium gating server-side; testing premium-success requires a logged-in user with is_premium=true (POST /api/stripe/mock-subscribe after register/login).",
+  "rca_of_issue": "N/A — all assertions passed. The two carry-over issues (Mongo _id leakage, monolithic server.py) are pre-existing and not regressions from this feature batch."
+}

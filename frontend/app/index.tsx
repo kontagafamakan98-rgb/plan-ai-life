@@ -19,6 +19,30 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
+import { CharacterCreatorModal } from '../src/components/CharacterCreatorModal';
+import { BuildModeModal } from '../src/components/BuildModeModal';
+import { PremiumModal } from '../src/components/PremiumModal';
+
+// Map character actions → overlay emoji shown next to them
+const ACTION_ICONS: Record<string, string> = {
+  coffee: '☕', drink: '☕', eat: '🍔', croissant: '🥐', dinner: '🍝', cook: '🍳',
+  meal: '🍳', work: '💻', meeting: '📊', sleep: '💤', shower: '🚿', toilet: '🚽',
+  exercise: '🏋️', lift: '🏋️', jog: '🏃', swim: '🏊', surf: '🏄', yoga: '🧘',
+  dance: '💃', party: '🎉', music: '🎵', read: '📖', study: '📚', game: '🎮',
+  tv: '📺', flirt: '😘', chat: '💬', meet: '👥', shop: '🛍️', bargain: '🛍️',
+  pray: '🙏', meditate: '🧘‍♀️', hike: '🥾', climb: '🧗', ski: '⛷️', surf_: '🏄',
+  paint: '🎨', sing: '🎤', walk: '🚶', relax: '🛋️', picnic: '🧺', sunbathe: '☀️',
+  bal: '🩰', opera: '🎭', tea: '🍵',
+};
+
+const getActionIcon = (action: string): string => {
+  if (!action) return '';
+  const lower = action.toLowerCase();
+  for (const [key, icon] of Object.entries(ACTION_ICONS)) {
+    if (lower.includes(key)) return icon;
+  }
+  return '';
+};
 
 const { width, height } = Dimensions.get('window');
 const API_BASE = process.env.EXPO_PUBLIC_BACKEND_URL || '';
@@ -130,13 +154,25 @@ const WalkingCharacter: React.FC<{
         
         {/* Mood indicator */}
         <View style={[styles.moodDot, { backgroundColor: moodColors[character.mood] || '#4CAF50' }]} />
+
+        {/* Action overlay icon (what they're actively doing) */}
+        {getActionIcon(character.current_action) ? (
+          <Animated.View
+            style={[
+              styles.actionOverlay,
+              { transform: [{ translateY: floatY }] },
+            ]}
+          >
+            <Text style={styles.actionOverlayIcon}>{getActionIcon(character.current_action)}</Text>
+          </Animated.View>
+        ) : null}
         
         {/* Name tag */}
         <View style={styles.nameTag}>
           <Text style={styles.nameTagText}>{character.name.split(' ')[0]}</Text>
         </View>
         
-        {/* Action bubble */}
+        {/* Action bubble (text label) */}
         <View style={styles.actionBubble}>
           <Text style={styles.actionBubbleText}>{character.current_action.substring(0, 15)}</Text>
         </View>
@@ -144,8 +180,8 @@ const WalkingCharacter: React.FC<{
         {/* Walking legs animation */}
         {character.is_moving && (
           <View style={styles.walkingLegs}>
-            <View style={[styles.leg, styles.leftLeg]} />
-            <View style={[styles.leg, styles.rightLeg]} />
+            <Animated.View style={[styles.leg, styles.leftLeg, { transform: [{ translateY: bounceY }] }]} />
+            <Animated.View style={[styles.leg, styles.rightLeg, { transform: [{ translateY: walkAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }] }]} />
           </View>
         )}
         
@@ -166,49 +202,85 @@ const IsometricWorld: React.FC<{
   location: Location | null;
   onCharacterPress: (char: Character) => void;
   onLocationChange: () => void;
-}> = ({ characters, location, onCharacterPress, onLocationChange }) => {
+  gameHour: number;
+  buildings?: any[];
+}> = ({ characters, location, onCharacterPress, onLocationChange, gameHour, buildings = [] }) => {
   const worldWidth = width - 20;
-  const worldHeight = 350;
+  const worldHeight = 360;
   
   const locationChars = location ? characters.filter(c => c.location_id === location.id) : [];
   
-  // Location-specific backgrounds
+  // Location-specific backgrounds + RICH decor (8+ objects)
   const getLocationStyle = (type: string) => {
-    const styles: Record<string, { sky: string[]; ground: string; objects: string[] }> = {
-      'cafe': { sky: ['#87CEEB', '#FFE4B5'], ground: '#D2B48C', objects: ['☕', '🪑', '🌸'] },
-      'apartment': { sky: ['#4A5568', '#2D3748'], ground: '#718096', objects: ['🏢', '🪴', '🛋️'] },
-      'office': { sky: ['#E2E8F0', '#CBD5E0'], ground: '#A0AEC0', objects: ['💼', '📊', '🖥️'] },
-      'park': { sky: ['#87CEEB', '#98FB98'], ground: '#228B22', objects: ['🌳', '🌸', '🦆'] },
-      'gym': { sky: ['#F56565', '#ED8936'], ground: '#E53E3E', objects: ['🏋️', '🥊', '💪'] },
-      'restaurant': { sky: ['#F6AD55', '#ED8936'], ground: '#DD6B20', objects: ['🍕', '🍷', '🕯️'] },
-      'club': { sky: ['#553C9A', '#6B46C1'], ground: '#44337A', objects: ['🎵', '🎧', '💃'] },
-      'beach': { sky: ['#63B3ED', '#4FD1C5'], ground: '#ECC94B', objects: ['🌴', '🏖️', '🌊'] },
-      'school': { sky: ['#90CDF4', '#63B3ED'], ground: '#4A5568', objects: ['📚', '✏️', '🎒'] },
-      'hospital': { sky: ['#E2E8F0', '#CBD5E0'], ground: '#FFFFFF', objects: ['🏥', '💊', '🩺'] },
-      'market': { sky: ['#F6AD55', '#FC8181'], ground: '#C53030', objects: ['🛒', '🍎', '🧺'] },
-      'museum': { sky: ['#B794F4', '#9F7AEA'], ground: '#6B46C1', objects: ['🎨', '🖼️', '🏛️'] },
-      'cinema': { sky: ['#1A202C', '#2D3748'], ground: '#4A5568', objects: ['🎬', '🍿', '🎥'] },
-      'temple': { sky: ['#F6E05E', '#ECC94B'], ground: '#D69E2E', objects: ['⛩️', '🙏', '🔔'] },
-      'mountain': { sky: ['#63B3ED', '#FFFFFF'], ground: '#48BB78', objects: ['⛰️', '🏔️', '🌲'] },
+    const stylesMap: Record<string, { sky: string[]; ground: string; objects: { e: string; size?: number }[] }> = {
+      'cafe': { sky: ['#87CEEB', '#FFE4B5'], ground: '#D2B48C', objects: [{e:'☕'},{e:'🪑'},{e:'🌸'},{e:'🍰'},{e:'🪟'},{e:'🥐'},{e:'🌹'},{e:'📰'},{e:'🪴'}] },
+      'apartment': { sky: ['#4A5568', '#2D3748'], ground: '#718096', objects: [{e:'🛋️'},{e:'📺'},{e:'🪴'},{e:'🛏️'},{e:'🪟'},{e:'📚'},{e:'🖼️'},{e:'💡'},{e:'🪞'}] },
+      'office': { sky: ['#E2E8F0', '#CBD5E0'], ground: '#A0AEC0', objects: [{e:'💼'},{e:'📊'},{e:'🖥️'},{e:'☕'},{e:'📝'},{e:'📞'},{e:'🗄️'},{e:'🪑'},{e:'📈'}] },
+      'park': { sky: ['#87CEEB', '#98FB98'], ground: '#228B22', objects: [{e:'🌳'},{e:'🌸'},{e:'🦆'},{e:'🌷'},{e:'🪑'},{e:'🌺'},{e:'🦋'},{e:'🌻'},{e:'🐿️'}] },
+      'gym': { sky: ['#F56565', '#ED8936'], ground: '#E53E3E', objects: [{e:'🏋️'},{e:'🥊'},{e:'💪'},{e:'🏃'},{e:'🚲'},{e:'🤸'},{e:'⚖️'},{e:'🥇'},{e:'💦'}] },
+      'restaurant': { sky: ['#F6AD55', '#ED8936'], ground: '#DD6B20', objects: [{e:'🍕'},{e:'🍷'},{e:'🕯️'},{e:'🍝'},{e:'🧀'},{e:'🍞'},{e:'🍷'},{e:'🪑'},{e:'🌹'}] },
+      'club': { sky: ['#553C9A', '#6B46C1'], ground: '#44337A', objects: [{e:'🎵'},{e:'🎧'},{e:'💃'},{e:'🍸'},{e:'🪩'},{e:'🎤'},{e:'🎸'},{e:'🕺'},{e:'✨'}] },
+      'beach': { sky: ['#63B3ED', '#4FD1C5'], ground: '#ECC94B', objects: [{e:'🌴'},{e:'🏖️'},{e:'🌊'},{e:'🐚'},{e:'⛱️'},{e:'🏄'},{e:'🦀'},{e:'🍹'},{e:'🐠'}] },
+      'school': { sky: ['#90CDF4', '#63B3ED'], ground: '#4A5568', objects: [{e:'📚'},{e:'✏️'},{e:'🎒'},{e:'🍎'},{e:'🪑'},{e:'📐'},{e:'🖍️'},{e:'🔬'},{e:'🎨'}] },
+      'hospital': { sky: ['#E2E8F0', '#CBD5E0'], ground: '#FFFFFF', objects: [{e:'🏥'},{e:'💊'},{e:'🩺'},{e:'🛌'},{e:'💉'},{e:'🧬'},{e:'🧴'},{e:'🦠'},{e:'❤️'}] },
+      'market': { sky: ['#F6AD55', '#FC8181'], ground: '#C53030', objects: [{e:'🛒'},{e:'🍎'},{e:'🧺'},{e:'🥕'},{e:'🥖'},{e:'🍇'},{e:'🌶️'},{e:'🧀'},{e:'🥦'}] },
+      'museum': { sky: ['#B794F4', '#9F7AEA'], ground: '#6B46C1', objects: [{e:'🎨'},{e:'🖼️'},{e:'🏛️'},{e:'⚱️'},{e:'📜'},{e:'🗿'},{e:'🪙'},{e:'🎭'},{e:'🔍'}] },
+      'cinema': { sky: ['#1A202C', '#2D3748'], ground: '#4A5568', objects: [{e:'🎬'},{e:'🍿'},{e:'🎥'},{e:'🎞️'},{e:'🪑'},{e:'🎫'},{e:'🥤'},{e:'🍫'},{e:'🎭'}] },
+      'temple': { sky: ['#F6E05E', '#ECC94B'], ground: '#D69E2E', objects: [{e:'⛩️'},{e:'🙏'},{e:'🔔'},{e:'🕯️'},{e:'🪷'},{e:'🍵'},{e:'🌸'},{e:'🪙'},{e:'📿'}] },
+      'mountain': { sky: ['#63B3ED', '#FFFFFF'], ground: '#48BB78', objects: [{e:'⛰️'},{e:'🏔️'},{e:'🌲'},{e:'🦅'},{e:'⛺'},{e:'🎿'},{e:'🐺'},{e:'🌨️'},{e:'🥾'}] },
     };
-    return styles[type] || styles['park'];
+    return stylesMap[type] || stylesMap['park'];
   };
-  
+
   const locStyle = getLocationStyle(location?.type || 'park');
+  
+  // Day/Night cycle based on game hour (0-23)
+  const isNight = gameHour < 6 || gameHour > 19;
+  const isDusk = gameHour >= 17 && gameHour <= 19;
+  const skyColors = isNight 
+    ? ['#0a0a2e', '#1a1a4e'] 
+    : isDusk 
+    ? ['#FF6B35', '#F7931E', '#FFC857']
+    : locStyle.sky;
+  const celestialIcon = isNight ? '🌙' : isDusk ? '🌇' : '☀️';
 
   return (
     <View style={[styles.isometricWorld, { width: worldWidth, height: worldHeight }]}>
-      {/* Sky */}
-      <LinearGradient colors={locStyle.sky} style={styles.sky} />
+      {/* Sky (with day/night colors) */}
+      <LinearGradient colors={skyColors} style={styles.sky} />
+      
+      {/* Stars at night */}
+      {isNight && (
+        <>
+          <Text style={[styles.star, { top: 15, left: 40 }]}>✨</Text>
+          <Text style={[styles.star, { top: 30, left: 120 }]}>⭐</Text>
+          <Text style={[styles.star, { top: 50, right: 80 }]}>✨</Text>
+          <Text style={[styles.star, { top: 22, right: 30 }]}>⭐</Text>
+        </>
+      )}
       
       {/* Sun/Moon */}
       <View style={styles.celestialBody}>
-        <Text style={styles.celestialEmoji}>☀️</Text>
+        <Text style={styles.celestialEmoji}>{celestialIcon}</Text>
       </View>
       
-      {/* Clouds */}
-      <View style={[styles.cloud, { left: 30, top: 25 }]}><Text style={styles.cloudText}>☁️</Text></View>
-      <View style={[styles.cloud, { right: 50, top: 40 }]}><Text style={styles.cloudText}>☁️</Text></View>
+      {/* Clouds (day only) */}
+      {!isNight && (
+        <>
+          <View style={[styles.cloud, { left: 30, top: 25 }]}><Text style={styles.cloudText}>☁️</Text></View>
+          <View style={[styles.cloud, { right: 50, top: 40 }]}><Text style={styles.cloudText}>☁️</Text></View>
+          <View style={[styles.cloud, { left: 180, top: 15 }]}><Text style={[styles.cloudText, { fontSize: 22 }]}>☁️</Text></View>
+        </>
+      )}
+      
+      {/* Distant horizon mountains/buildings silhouette */}
+      <View style={styles.horizonLayer}>
+        <Text style={styles.horizonObj}>🏔️</Text>
+        <Text style={[styles.horizonObj, { left: 90 }]}>🏢</Text>
+        <Text style={[styles.horizonObj, { left: 170 }]}>🏛️</Text>
+        <Text style={[styles.horizonObj, { right: 90 }]}>🏬</Text>
+        <Text style={[styles.horizonObj, { right: 20 }]}>🗼</Text>
+      </View>
       
       {/* Location header */}
       <TouchableOpacity style={styles.locationHeader} onPress={onLocationChange}>
@@ -224,15 +296,42 @@ const IsometricWorld: React.FC<{
       
       {/* Ground */}
       <View style={[styles.ground, { backgroundColor: locStyle.ground }]}>
-        {/* Ground pattern */}
         <View style={styles.groundPattern} />
+        {/* Ground tiles for isometric look */}
+        <View style={styles.tilesRow}>
+          {Array.from({ length: 6 }).map((_, i) => (
+            <View key={i} style={styles.tile} />
+          ))}
+        </View>
       </View>
       
-      {/* Decorative objects */}
-      {locStyle.objects.map((obj, i) => (
-        <Text key={i} style={[styles.decorObject, { left: 20 + (i * (worldWidth / 4)), bottom: 45 + (i % 2) * 15 }]}>
-          {obj}
-        </Text>
+      {/* Decorative objects - now 9 per scene, spread across the ground */}
+      {locStyle.objects.map((obj, i) => {
+        const cols = 3;
+        const row = Math.floor(i / cols);
+        const col = i % cols;
+        const left = 20 + col * ((worldWidth - 60) / 2);
+        const bottom = 30 + row * 30;
+        return (
+          <Text key={i} style={[styles.decorObject, { left, bottom, opacity: isNight ? 0.7 : 1 }]}>
+            {obj.e}
+          </Text>
+        );
+      })}
+
+      {/* User-placed buildings (for my_home) */}
+      {buildings.map((b: any) => (
+        <View
+          key={b.id}
+          style={{
+            position: 'absolute',
+            left: (b.x / 100) * worldWidth - 18,
+            top: (b.y / 100) * worldHeight - 18,
+            zIndex: 30,
+          }}
+        >
+          <Text style={{ fontSize: 30 }}>{b.emoji}</Text>
+        </View>
       ))}
       
       {/* Characters */}
@@ -250,15 +349,18 @@ const IsometricWorld: React.FC<{
       {/* Empty state */}
       {locationChars.length === 0 && (
         <View style={styles.emptyWorld}>
-          <Text style={styles.emptyText}>👻 No one here...</Text>
-          <Text style={styles.emptySubtext}>Change location or wait for characters</Text>
+          <Text style={styles.emptyText}>👻 No one here yet...</Text>
+          <Text style={styles.emptySubtext}>Move a character here or change location</Text>
         </View>
       )}
       
-      {/* Character count */}
+      {/* Character count & time badge */}
       <View style={styles.charCounter}>
         <Ionicons name="people" size={16} color="#FFF" />
         <Text style={styles.charCounterText}>{locationChars.length}</Text>
+      </View>
+      <View style={styles.timeBadge}>
+        <Text style={styles.timeBadgeText}>{String(gameHour).padStart(2, '0')}:00</Text>
       </View>
     </View>
   );
@@ -489,6 +591,9 @@ export default function LifeSimulator() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [buildings, setBuildings] = useState<any[]>([]);
+  const [objectives, setObjectives] = useState<string[]>([]);
+  const [hobbiesList, setHobbiesList] = useState<string[]>([]);
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null);
   const [currentLocationId, setCurrentLocationId] = useState('paris_cafe');
   const [isPaused, setIsPaused] = useState(false);
@@ -500,19 +605,30 @@ export default function LifeSimulator() {
   const [autoSimulate, setAutoSimulate] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [language, setLanguage] = useState('en');
+  const [showCreator, setShowCreator] = useState(false);
+  const [showBuilder, setShowBuilder] = useState(false);
+  const [showPremium, setShowPremium] = useState(false);
+  const [gameHour, setGameHour] = useState(new Date().getHours());
+  const [isPremium] = useState(false); // TODO: wire to auth user
 
   const fetchData = useCallback(async () => {
     try {
-      const [charsRes, locsRes, logsRes, worldRes] = await Promise.all([
+      const [charsRes, locsRes, logsRes, worldRes, objRes, hobRes, buildRes] = await Promise.all([
         axios.get(`${API_BASE}/api/characters`),
         axios.get(`${API_BASE}/api/locations`),
         axios.get(`${API_BASE}/api/logs?limit=10`),
         axios.get(`${API_BASE}/api/world`),
+        axios.get(`${API_BASE}/api/objectives`).catch(() => ({ data: [] })),
+        axios.get(`${API_BASE}/api/hobbies`).catch(() => ({ data: [] })),
+        axios.get(`${API_BASE}/api/build/items?location_id=my_home`).catch(() => ({ data: [] })),
       ]);
       setCharacters(charsRes.data);
       setLocations(locsRes.data);
       setLogs(logsRes.data);
       setIsPaused(worldRes.data.is_paused || false);
+      setObjectives(objRes.data || []);
+      setHobbiesList(hobRes.data || []);
+      setBuildings(buildRes.data || []);
     } catch (error) {
       console.error('Fetch error:', error);
     } finally {
@@ -522,6 +638,16 @@ export default function LifeSimulator() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // In-game clock — advance one hour every 30 real seconds (or faster if speed>1)
+  useEffect(() => {
+    if (isPaused) return;
+    const ms = Math.max(5000, 30000 / speed);
+    const interval = setInterval(() => {
+      setGameHour(h => (h + 1) % 24);
+    }, ms);
+    return () => clearInterval(interval);
+  }, [speed, isPaused]);
 
   // Auto-simulate based on speed
   useEffect(() => {
@@ -586,8 +712,17 @@ export default function LifeSimulator() {
           <Text style={styles.headerSubtitle}>God Simulator</Text>
         </View>
         <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.headerBtnPremium} onPress={() => setShowPremium(true)}>
+            <Text style={styles.headerCrown}>👑</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerBtn} onPress={() => setShowCreator(true)}>
+            <Ionicons name="person-add" size={20} color="#FFF" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerBtn} onPress={() => { setCurrentLocationId('my_home'); setShowBuilder(true); }}>
+            <Ionicons name="hammer" size={20} color="#FFF" />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.headerBtn} onPress={() => setShowSettings(true)}>
-            <Ionicons name="settings-outline" size={22} color="#FFF" />
+            <Ionicons name="settings-outline" size={20} color="#FFF" />
           </TouchableOpacity>
         </View>
       </View>
@@ -603,6 +738,8 @@ export default function LifeSimulator() {
           location={currentLocation || null}
           onCharacterPress={setSelectedCharacter}
           onLocationChange={() => setShowLocationPicker(true)}
+          gameHour={gameHour}
+          buildings={currentLocationId === 'my_home' ? buildings : []}
         />
         
         {/* God Control Panel */}
@@ -716,6 +853,29 @@ export default function LifeSimulator() {
           </View>
         </View>
       </Modal>
+
+      {/* Character Creator (P2 Sandbox) */}
+      <CharacterCreatorModal
+        visible={showCreator}
+        onClose={() => setShowCreator(false)}
+        onCreated={(c) => {
+          setCurrentLocationId(c.location_id || 'my_home');
+          fetchData();
+        }}
+        objectives={objectives}
+        hobbies={hobbiesList}
+      />
+
+      {/* Build Mode */}
+      <BuildModeModal
+        visible={showBuilder}
+        onClose={() => { setShowBuilder(false); fetchData(); }}
+        onUpgradeRequest={() => { setShowBuilder(false); setShowPremium(true); }}
+        isPremium={isPremium}
+      />
+
+      {/* Premium */}
+      <PremiumModal visible={showPremium} onClose={() => setShowPremium(false)} />
     </SafeAreaView>
   );
 }
@@ -734,7 +894,22 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#00D4FF' },
   headerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
   headerRight: { flexDirection: 'row', gap: 8 },
-  headerBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  headerBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.1)', justifyContent: 'center', alignItems: 'center' },
+  headerBtnPremium: { width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,215,0,0.18)', borderWidth: 1, borderColor: 'rgba(255,215,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  headerCrown: { fontSize: 18 },
+  
+  // Action overlay
+  actionOverlay: { position: 'absolute', top: -8, right: -18, backgroundColor: '#FFF', width: 24, height: 24, borderRadius: 12, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 3 },
+  actionOverlayIcon: { fontSize: 14 },
+  
+  // Star, horizon, time badge, tile
+  star: { position: 'absolute', fontSize: 12, opacity: 0.9 },
+  horizonLayer: { position: 'absolute', left: 0, right: 0, top: '40%', flexDirection: 'row', justifyContent: 'space-around', opacity: 0.25 },
+  horizonObj: { position: 'absolute', fontSize: 36 },
+  timeBadge: { position: 'absolute', top: 70, right: 12, backgroundColor: 'rgba(0,0,0,0.5)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  timeBadgeText: { color: '#FFF', fontSize: 11, fontWeight: '600' },
+  tilesRow: { flexDirection: 'row', position: 'absolute', bottom: 0, left: 0, right: 0, height: 4, opacity: 0.15 },
+  tile: { flex: 1, borderRightWidth: 1, borderRightColor: '#000' },
   
   content: { flex: 1 },
   
