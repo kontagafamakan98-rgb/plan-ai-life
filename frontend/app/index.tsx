@@ -421,11 +421,11 @@ const GodControlPanel: React.FC<{
         </TouchableOpacity>
         
         <TouchableOpacity 
-          style={[styles.controlBtn, styles.controlBtnSmall, autoSimulate && styles.controlBtnActive]}
+          style={[styles.controlBtn, styles.controlBtnSmall, autoSimulate ? styles.controlBtnActive : styles.controlBtnInactive]}
           onPress={onAutoToggle}
         >
-          <Ionicons name={autoSimulate ? "sync" : "sync-outline"} size={18} color="#FFF" />
-          <Text style={styles.controlBtnTextSmall}>Auto</Text>
+          <Ionicons name={autoSimulate ? "sync" : "pause-circle-outline"} size={18} color="#FFF" />
+          <Text style={styles.controlBtnTextSmall}>{autoSimulate ? 'Auto ON' : 'Auto OFF'}</Text>
         </TouchableOpacity>
       </View>
       
@@ -1041,7 +1041,8 @@ const styles = StyleSheet.create({
   statusDot: { width: 10, height: 10, borderRadius: 5 },
   controlsRow: { flexDirection: 'row', gap: 8 },
   controlBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#00D4FF', paddingVertical: 12, borderRadius: 10, gap: 6 },
-  controlBtnActive: { backgroundColor: '#0099CC' },
+  controlBtnActive: { backgroundColor: '#4CAF50', shadowColor: '#4CAF50', shadowOpacity: 0.7, shadowRadius: 8 },
+  controlBtnInactive: { backgroundColor: '#4B5563', opacity: 0.7 },
   controlBtnSecondary: { backgroundColor: '#6B7280' },
   controlBtnDanger: { backgroundColor: '#F44336' },
   controlBtnSmall: { flex: 0.6 },
