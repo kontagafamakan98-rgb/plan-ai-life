@@ -24,7 +24,7 @@ import { BuildModeModal } from '../src/components/BuildModeModal';
 import { PremiumModal } from '../src/components/PremiumModal';
 import { Scene3D } from '../src/components/Scene3D';
 import { HaveBabyModal } from '../src/components/HaveBabyModal';
-import { KawaiiScene } from '../src/components/KawaiiScene';
+import { OmoriRoom } from '../src/components/OmoriRoom';
 
 // Map character actions → overlay emoji shown next to them
 const ACTION_ICONS: Record<string, string> = {
@@ -756,7 +756,7 @@ export default function LifeSimulator() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} tintColor="#00D4FF" />}
       >
-        {/* Rich Isometric scene (default) or 3D World */}
+        {/* OMORI-style top-down room (default) or 3D World */}
         {view3D ? (
           <Scene3D
             characters={(currentLocation ? characters.filter(c => c.location_id === currentLocation.id) : []) as any}
@@ -767,23 +767,23 @@ export default function LifeSimulator() {
             onCharacterClick={setSelectedCharacter}
           />
         ) : (
-          <IsometricWorld
-            characters={characters}
-            location={currentLocation || null}
+          <OmoriRoom
+            characters={(currentLocation ? characters.filter(c => c.location_id === currentLocation.id) : []) as any}
+            location={(currentLocation as any) || null}
+            buildings={currentLocationId === 'my_home' ? buildings : []}
+            gameHour={gameHour}
             onCharacterPress={setSelectedCharacter}
             onLocationChange={() => setShowLocationPicker(true)}
-            gameHour={gameHour}
-            buildings={currentLocationId === 'my_home' ? buildings : []}
           />
         )}
 
         {/* View toggle row */}
         <View style={styles.viewToggleRow}>
           <TouchableOpacity style={[styles.viewToggleBtn, !view3D && styles.viewToggleBtnActive]} onPress={() => setView3D(false)}>
-            <Text style={styles.viewToggleText}>🗺️ Isometric</Text>
+            <Text style={styles.viewToggleText}>🎮 OMORI</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.viewToggleBtn, view3D && styles.viewToggleBtnActive]} onPress={() => setView3D(true)}>
-            <Text style={styles.viewToggleText}>🎮 3D</Text>
+            <Text style={styles.viewToggleText}>🧊 3D</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.travelChipBtn} onPress={() => setShowLocationPicker(true)}>
             <Ionicons name="airplane" size={14} color="#FFF" />
