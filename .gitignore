@@ -82,7 +82,18 @@ memory/test_credentials.md
 android-sdk/
 .env
 .env.*
+!.env.example
 *.env
 credentials.json
 *.key
 .credentials
+
+# ARCADIA-9 local save file (contains a player's progress)
+backend/data/
+
+# Local process bookkeeping
+*.pid
+
+# Local dev-server output (uvicorn, expo/metro)
+*.log
+
