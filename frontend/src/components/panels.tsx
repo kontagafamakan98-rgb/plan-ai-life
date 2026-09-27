@@ -320,7 +320,7 @@ export function ResidentSheet({
     .sort((a, b) => b.value - a.value);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
       <View style={styles.sheetOverlay}>
         <View style={styles.sheet}>
           <View style={styles.sheetHeader}>
@@ -871,7 +871,7 @@ export function CycleReportSheet({
   if (!report) return null;
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible animationType="none" transparent onRequestClose={onClose}>
       <View style={styles.sheetOverlay}>
         <View style={styles.sheet}>
           <View style={styles.sheetHeader}>
@@ -1046,7 +1046,7 @@ export function ToastStack({
 }) {
   if (!toasts.length) return null;
   return (
-    <View style={styles.toastWrap} pointerEvents="box-none">
+    <View style={[styles.toastWrap, { pointerEvents: 'box-none' }]}>
       {toasts.map((toast) => {
         const color =
           toast.tone === 'good' ? palette.green : toast.tone === 'bad' ? palette.rose : palette.accent;

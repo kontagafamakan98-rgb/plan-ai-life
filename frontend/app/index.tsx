@@ -591,7 +591,7 @@ function PlacePicker({
   const total = groups.reduce((sum, group) => sum + group.items.length, 0);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
       <View style={styles.sheetOverlay}>
         <View style={styles.picker}>
           <View style={styles.pickerHeader}>

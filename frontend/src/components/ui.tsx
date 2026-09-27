@@ -21,6 +21,7 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
+  Modal,
   Platform,
   StyleSheet,
   Text,
@@ -202,6 +203,40 @@ export function useEntrance(delay = 0) {
       },
     ],
   };
+}
+
+/**
+ * Modal layer.
+ *
+ * The platform sheet animation is dropped by some browsers when the system asks
+ * for reduced motion, and the sheet then stays off screen instead of appearing.
+ * The layer therefore never relies on it: the sheet is placed where it belongs
+ * and rises by eight pixels while it fades in, which is all the movement this
+ * interface needs. Under reduced motion it appears at once.
+ */
+export function ModalLayer({
+  visible,
+  onClose,
+  overlayStyle,
+  contentStyle,
+  children,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  overlayStyle?: StyleProp<ViewStyle>;
+  contentStyle?: StyleProp<ViewStyle>;
+  children: React.ReactNode;
+}) {
+  const entrance = useEntrance();
+  return (
+    <Modal visible={visible} animationType="none" transparent onRequestClose={onClose}>
+      <Animated.View style={[overlayStyle, { opacity: entrance.opacity }]}>
+        <Animated.View style={[contentStyle, { transform: entrance.transform }]}>
+          {children}
+        </Animated.View>
+      </Animated.View>
+    </Modal>
+  );
 }
 
 /* ------------------------------------------------------------------ *

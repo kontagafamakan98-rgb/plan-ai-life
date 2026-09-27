@@ -9,16 +9,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-  Modal,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import {
   lucidityColor,
@@ -37,6 +28,7 @@ import {
   ActionButton,
   BodyText,
   IconButton,
+  ModalLayer,
   Panel,
   Tag,
   Row,
@@ -61,25 +53,30 @@ function ModalShell({
 }) {
   const { t } = useI18n();
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <View style={styles.overlay}>
-        <View style={styles.sheet}>
-          <View style={styles.header}>
+    <ModalLayer
+      visible={visible}
+      onClose={onClose}
+      overlayStyle={styles.overlay}
+      contentStyle={styles.sheet}
+    >
+      <View style={styles.header}>
             <View style={styles.headerText}>
               <Text accessibilityRole="header" style={styles.title}>
                 {title}
               </Text>
               {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
             </View>
-            <IconButton icon="close" onPress={onClose} accessibilityLabel={t('common.close')} />
-          </View>
-          <ScrollView style={styles.body} showsVerticalScrollIndicator={false} contentContainerStyle={styles.bodyContent}>
-            {children}
-          </ScrollView>
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
-        </View>
+        <IconButton icon="close" onPress={onClose} accessibilityLabel={t('common.close')} />
       </View>
-    </Modal>
+      <ScrollView
+        style={styles.body}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.bodyContent}
+      >
+        {children}
+      </ScrollView>
+      {footer ? <View style={styles.footer}>{footer}</View> : null}
+    </ModalLayer>
   );
 }
 
