@@ -48,25 +48,8 @@ import {
   SPRITE_BASE_HEIGHT,
   SPRITE_GROUND_INSET,
 } from './ResidentSprite';
-
-type PropKind =
-  | 'counter'
-  | 'table'
-  | 'plant'
-  | 'tree'
-  | 'machine'
-  | 'screen'
-  | 'mat'
-  | 'lamp'
-  | 'shelf'
-  | 'bench'
-  | 'water'
-  | 'bed'
-  | 'sofa'
-  | 'desk'
-  | 'altar'
-  | 'stage'
-  | 'stones';
+import { PROP_BOX, SceneryPropArt, type PropKind } from './Scenery';
+import { Dust, ForegroundFrame, HourGrade, SunBloom, WallDressing, WindowLight } from './Atmosphere';
 
 interface Prop {
   kind: PropKind;
@@ -237,27 +220,6 @@ const PLASTER: { x: number; y: number; w: number; h: number; o: number }[] = [
   { x: 0.72, y: 0.44, w: 0.26, h: 0.26, o: 0.14 },
   { x: 0.24, y: 0.66, w: 0.28, h: 0.2, o: 0.1 },
 ];
-
-/** Footprint of each prop, in sprite units, used for anchoring and shadows. */
-const PROP_BOX: Record<PropKind, { w: number; h: number }> = {
-  counter: { w: 136, h: 96 },
-  table: { w: 66, h: 46 },
-  desk: { w: 80, h: 72 },
-  bench: { w: 84, h: 48 },
-  machine: { w: 48, h: 70 },
-  screen: { w: 92, h: 66 },
-  shelf: { w: 56, h: 92 },
-  mat: { w: 96, h: 34 },
-  plant: { w: 48, h: 60 },
-  tree: { w: 104, h: 132 },
-  lamp: { w: 44, h: 96 },
-  water: { w: 190, h: 46 },
-  bed: { w: 110, h: 66 },
-  sofa: { w: 118, h: 68 },
-  altar: { w: 74, h: 80 },
-  stage: { w: 200, h: 100 },
-  stones: { w: 68, h: 32 },
-};
 
 /** Floor boards, near rows first. Widths grow toward the viewer. */
 const FLOOR_ROWS: { h: number; count: number; offset: number; tone: number }[] = [
@@ -545,6 +507,9 @@ function Wall({
       {sconces.map((x) => (
         <Sconce key={x} x={x} wall={wall} />
       ))}
+
+      {/* The wall is lived in: pictures, boards, pipes, a pendant or two. */}
+      <WallDressing roomType={roomType} wall={wall} trim={room.trim} accent={room.accent} />
 
       {/* Overall wash: warm at dusk and night, plain at noon. */}
       <LinearGradient
@@ -834,23 +799,24 @@ function Horizon({
  * ------------------------------------------------------------------ */
 
 /**
- * One piece of furniture, built from materials.
+ * One piece of furniture, placed on the boards.
  *
- * Each prop is a small stack of layers: a lit top face, a darker body, and two
- * or three details (a rail, a drawer, a brass fitting) so the room reads as a
- * place somebody works in rather than as a block of colour. Every tone is
- * derived from the room's accent and the world palette with warm shading.
+ * The drawing lives in Scenery.tsx, one vector object per kind. This wrapper
+ * only does the placing: the footprint comes from PROP_BOX, the base sits on
+ * the floor, and the bottom edge scales outwards when a prop is enlarged, so a
+ * bigger object grows from the ground rather than through it.
  */
-/**
- * One piece of furniture, built from materials.
- *
- * Every prop is drawn inside a fixed box whose bottom edge is the point where it
- * touches the floor, so a table, a bed and a lamp all stand on the same line.
- * Parts are placed from that line with explicit offsets rather than by a flow,
- * which is what lets a top slab sit on its own body, a drawer sit between two
- * panels, and a lamp throw a pool of light on the boards.
- */
-function SceneryProp({ prop, accent, trim }: { prop: Prop; accent: string; trim: string }) {
+function SceneryProp({
+  prop,
+  accent,
+  trim,
+  index,
+}: {
+  prop: Prop;
+  accent: string;
+  trim: string;
+  index: number;
+}) {
   const box = PROP_BOX[prop.kind] ?? PROP_BOX.table;
   const scale = prop.size ?? 1;
   const wrapper: ViewStyle = {
@@ -864,470 +830,12 @@ function SceneryProp({ prop, accent, trim }: { prop: Prop; accent: string; trim:
     transform: [{ scale }],
     transformOrigin: 'bottom center',
   };
-  const accentLit = warmLight(accent, 26, 0.28);
-  const accentDeep = warmShade(accent, -30, 0.3);
-  const woodTop = world.oak;
-  const woodDeep = world.walnut;
-  const shadow = (width: number, alpha = 0.32) => (
-    <View
-      style={[
-        styles.contact,
-        { width, left: (box.w - width) / 2, backgroundColor: withAlpha(world.shadow, alpha) },
-      ]}
-    />
+
+  return (
+    <View style={wrapper} testID={`stage-prop-${prop.kind}`}>
+      <SceneryPropArt kind={prop.kind} accent={accent} trim={trim} uid={`prop-${index}`} />
+    </View>
   );
-
-  const id = `stage-prop-${prop.kind}`;
-
-  switch (prop.kind) {
-    case 'counter':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(128)}
-          <View style={[styles.counterBody, { backgroundColor: woodDeep, borderColor: trim }]}>
-            {[0, 1, 2].map((index) => (
-              <View
-                key={index}
-                style={[
-                  styles.counterPanel,
-                  {
-                    borderColor: withAlpha(world.brass, 0.28),
-                    backgroundColor: withAlpha(world.oak, 0.14),
-                  },
-                ]}
-              />
-            ))}
-          </View>
-          <View style={[styles.counterRail, { backgroundColor: world.brass }]}>
-            <View style={[styles.counterRailLit, { backgroundColor: withAlpha(world.rim, 0.5) }]} />
-          </View>
-          <View style={[styles.counterTop, { backgroundColor: woodTop, borderColor: woodDeep }]}>
-            <View style={[styles.counterTopLit, { backgroundColor: withAlpha(world.rim, 0.16) }]} />
-          </View>
-          <View style={styles.counterItems}>
-            <View
-              style={[
-                styles.cup,
-                { backgroundColor: world.linen, borderColor: withAlpha(world.shadow, 0.3) },
-              ]}
-            >
-              <View
-                style={[styles.part, styles.cupRim, { backgroundColor: withAlpha(world.shadow, 0.35) }]}
-              />
-            </View>
-            <View
-              style={[
-                styles.cup,
-                {
-                  backgroundColor: warmLight(world.linen, -14, 0.2),
-                  borderColor: withAlpha(world.shadow, 0.3),
-                },
-              ]}
-            />
-            <View
-              style={[
-                styles.jar,
-                { backgroundColor: withAlpha(world.brass, 0.92), borderColor: world.brassDark },
-              ]}
-            >
-              <View style={[styles.part, styles.jarNeck, { backgroundColor: world.brassDark }]} />
-            </View>
-          </View>
-        </View>
-      );
-
-    case 'table':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(58, 0.28)}
-          <View style={[styles.tableFoot, { backgroundColor: warmShade(woodDeep, -12, 0.3) }]} />
-          <View style={[styles.tableColumn, { backgroundColor: woodDeep }]}>
-            <View
-              style={[styles.part, styles.tableColumnLit, { backgroundColor: withAlpha(world.oak, 0.34) }]}
-            />
-          </View>
-          <View style={[styles.tableApron, { backgroundColor: woodDeep }]}>
-            <View
-              style={[styles.part, styles.tableApronLit, { backgroundColor: withAlpha(world.rim, 0.12) }]}
-            />
-          </View>
-          <View style={[styles.tableTop, { backgroundColor: woodTop, borderColor: woodDeep }]}>
-            <View style={[styles.part, styles.tableTopLit, { backgroundColor: withAlpha(world.rim, 0.14) }]} />
-          </View>
-        </View>
-      );
-
-    case 'desk':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(72, 0.3)}
-          <View style={[styles.deskBody, { backgroundColor: woodDeep, borderColor: trim }]}>
-            {[0, 1].map((index) => (
-              <View key={index} style={[styles.deskDrawer, { borderColor: withAlpha(world.brass, 0.34) }]}>
-                <View style={[styles.deskHandle, { backgroundColor: world.brass }]} />
-              </View>
-            ))}
-          </View>
-          <View style={[styles.deskTop, { backgroundColor: woodTop, borderColor: woodDeep }]}>
-            <View style={[styles.part, styles.deskTopLit, { backgroundColor: withAlpha(world.rim, 0.14) }]} />
-          </View>
-          <View style={styles.deskItems}>
-            <View style={styles.deskLamp}>
-              <View style={[styles.lampHead, { backgroundColor: world.brass }]}>
-                <View style={[styles.deskBulb, { backgroundColor: world.glowSoft }]} />
-              </View>
-              <View style={[styles.lampStem, { backgroundColor: world.brassDark }]} />
-            </View>
-            <View
-              style={[styles.papers, { backgroundColor: world.linen, borderColor: withAlpha(world.shadow, 0.2) }]}
-            >
-              <View
-                style={[styles.part, styles.paperLine, { backgroundColor: withAlpha(world.shadow, 0.22) }]}
-              />
-              <View
-                style={[
-                  styles.part,
-                  styles.paperLine,
-                  { top: 3, width: 14, backgroundColor: withAlpha(world.shadow, 0.18) },
-                ]}
-              />
-            </View>
-          </View>
-        </View>
-      );
-
-    case 'bench':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(74, 0.3)}
-          <View style={[styles.benchLeg, { left: 8, backgroundColor: warmShade(trim, -22, 0.4) }]} />
-          <View style={[styles.benchLeg, { right: 8, backgroundColor: warmShade(trim, -22, 0.4) }]} />
-          <View style={[styles.benchSeat, { backgroundColor: woodTop, borderColor: woodDeep }]}>
-            {[0, 1, 2].map((index) => (
-              <View
-                key={index}
-                style={[
-                  styles.benchSeam,
-                  { left: 10 + index * 22, backgroundColor: withAlpha(world.shadow, 0.3) },
-                ]}
-              />
-            ))}
-          </View>
-          <View style={[styles.benchBack, { backgroundColor: woodDeep }]}>
-            <View style={[styles.benchBar, { backgroundColor: woodTop }]} />
-            <View style={[styles.benchBar, { backgroundColor: woodTop }]} />
-          </View>
-        </View>
-      );
-
-    case 'machine':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(42, 0.3)}
-          <View style={[styles.machineBase, { backgroundColor: warmShade(trim, -24, 0.4) }]} />
-          <View
-            style={[
-              styles.machineBody,
-              { borderColor: accentDeep, backgroundColor: mix(trim, world.shadow, 0.45) },
-            ]}
-          >
-            <View style={[styles.machinePanel, { borderColor: withAlpha(accentLit, 0.4) }]}>
-              <View
-                style={[styles.machineDial, { backgroundColor: world.brass, borderColor: world.brassDark }]}
-              />
-              <View
-                style={[styles.machineDial, { backgroundColor: world.brassDark, borderColor: world.brass }]}
-              />
-            </View>
-            <View style={[styles.machineLight, { backgroundColor: accentLit }]}>
-              <View
-                style={[styles.part, styles.machineHalo, { backgroundColor: withAlpha(accentLit, 0.32) }]}
-              />
-            </View>
-          </View>
-        </View>
-      );
-
-    case 'screen':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(80, 0.3)}
-          <View style={[styles.screenBase, { backgroundColor: warmShade(woodDeep, -10, 0.3) }]} />
-          <View style={[styles.screenStand, { backgroundColor: woodDeep }]} />
-          <View
-            style={[
-              styles.screenFrame,
-              { borderColor: trim, backgroundColor: withAlpha(world.shadow, 0.92) },
-            ]}
-          >
-            <LinearGradient
-              colors={[
-                withAlpha(world.glow, 0.42),
-                withAlpha(world.glow, 0.14),
-                withAlpha(accentDeep, 0.32),
-              ]}
-              start={{ x: 0.1, y: 0 }}
-              end={{ x: 0.9, y: 1 }}
-              style={styles.screenGlow}
-            />
-            <View style={[styles.screenLine, { backgroundColor: withAlpha(world.rim, 0.35) }]} />
-            <View
-              style={[
-                styles.screenLine,
-                { top: '62%', width: '52%', backgroundColor: withAlpha(world.rim, 0.2) },
-              ]}
-            />
-            <View style={[styles.part, styles.screenSheen, { backgroundColor: withAlpha(world.rim, 0.12) }]} />
-          </View>
-        </View>
-      );
-
-    case 'shelf':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(48, 0.28)}
-          <View
-            style={[styles.shelf, { borderColor: woodDeep, backgroundColor: withAlpha(world.shadow, 0.36) }]}
-          >
-            <View style={[styles.shelfBay, { borderBottomColor: woodTop }]} />
-            <View style={[styles.shelfBay, { borderBottomColor: woodTop }]}>
-              <View style={styles.shelfBooks}>
-                <View style={[styles.shelfBook, { backgroundColor: world.terracotta, height: 19 }]} />
-                <View style={[styles.shelfBook, { backgroundColor: world.sage, height: 15, width: 5 }]} />
-                <View style={[styles.shelfBook, { backgroundColor: accentLit, height: 20, width: 4 }]} />
-                <View style={[styles.shelfBook, { backgroundColor: world.brass, height: 14, width: 6 }]} />
-              </View>
-            </View>
-            <View style={[styles.shelfBay, { borderBottomColor: woodTop }]}>
-              <View style={[styles.shelfBasket, { backgroundColor: withAlpha(world.sand, 0.7) }]}>
-                <View
-                  style={[styles.part, styles.basketWeave, { backgroundColor: withAlpha(world.shadow, 0.22) }]}
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-      );
-
-    case 'mat':
-      return (
-        <View style={wrapper} testID={id}>
-          <View
-            style={[styles.mat, { backgroundColor: mix(accent, world.walnut, 0.38), borderColor: accentDeep }]}
-          >
-            <View style={[styles.part, styles.matBorder, { borderColor: withAlpha(world.rim, 0.2) }]} />
-            <View style={[styles.part, styles.matWeave, { backgroundColor: withAlpha(world.shadow, 0.14) }]} />
-            <View
-              style={[
-                styles.part,
-                styles.matWeave,
-                { top: '62%', backgroundColor: withAlpha(world.shadow, 0.1) },
-              ]}
-            />
-          </View>
-        </View>
-      );
-
-    case 'plant':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(34, 0.26)}
-          <View
-            style={[
-              styles.pot,
-              { backgroundColor: world.terracotta, borderColor: warmShade(world.terracotta, -30, 0.35) },
-            ]}
-          >
-            <View
-              style={[styles.part, styles.potRim, { backgroundColor: warmLight(world.terracotta, 18, 0.22) }]}
-            />
-          </View>
-          <View style={[styles.stem, { backgroundColor: world.sageDark }]} />
-          <View style={[styles.leaf, { backgroundColor: world.sage }]} />
-          <View style={[styles.leafAlt, { backgroundColor: warmLight(world.sage, 18, 0.24) }]} />
-          <View style={[styles.leafSide, { backgroundColor: warmShade(world.sage, -12, 0.3) }]} />
-        </View>
-      );
-
-    case 'tree':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(40, 0.34)}
-          <View style={[styles.trunk, { backgroundColor: world.walnut }]}>
-            <View style={[styles.part, styles.bark, { backgroundColor: withAlpha(world.shadow, 0.32) }]} />
-            <View
-              style={[styles.part, styles.bark, { left: 6, backgroundColor: withAlpha(world.oak, 0.35) }]}
-            />
-          </View>
-          <View style={[styles.canopy, { backgroundColor: world.sageDark }]} />
-          <View style={[styles.canopyMid, { backgroundColor: warmShade(world.sage, -6, 0.26) }]} />
-          <View style={[styles.canopyLit, { backgroundColor: warmLight(world.sage, 22, 0.3) }]} />
-        </View>
-      );
-
-    case 'lamp':
-      return (
-        <View style={wrapper} testID={id}>
-          <View style={[styles.part, styles.lampPool, { backgroundColor: withAlpha(world.glow, 0.16) }]} />
-          <View style={[styles.part, styles.lampHalo, { backgroundColor: withAlpha(world.glow, 0.24) }]} />
-          <View style={[styles.lampBase, { backgroundColor: warmShade(world.brassDark, -18, 0.36) }]} />
-          <View style={[styles.lampPole, { backgroundColor: world.brassDark }]} />
-          <View style={[styles.lampGlass, { backgroundColor: world.glowSoft }]} />
-          <View style={[styles.lampShade, { backgroundColor: world.brass, borderColor: world.brassDark }]}>
-            <View
-              style={[styles.part, styles.lampShadeLit, { backgroundColor: withAlpha(world.glowSoft, 0.4) }]}
-            />
-          </View>
-        </View>
-      );
-
-    case 'water':
-      return (
-        <View style={wrapper} testID={id}>
-          <View style={[styles.wetSand, { backgroundColor: withAlpha(world.sand, 0.5) }]} />
-          <View
-            style={[
-              styles.water,
-              { backgroundColor: withAlpha(accent, 0.55), borderColor: withAlpha(accentLit, 0.55) },
-            ]}
-          >
-            <LinearGradient
-              colors={[withAlpha(world.rim, 0.28), withAlpha(accentDeep, 0.42)]}
-              start={{ x: 0.2, y: 0 }}
-              end={{ x: 0.8, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
-            <View style={[styles.part, styles.waterLine, { backgroundColor: withAlpha(world.rim, 0.42) }]} />
-            <View
-              style={[
-                styles.part,
-                styles.waterLine,
-                { top: '54%', width: '46%', backgroundColor: withAlpha(world.rim, 0.26) },
-              ]}
-            />
-            <View
-              style={[
-                styles.part,
-                styles.waterLine,
-                { top: '74%', width: '30%', backgroundColor: withAlpha(world.rim, 0.18) },
-              ]}
-            />
-          </View>
-        </View>
-      );
-
-    case 'bed':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(98, 0.3)}
-          <View style={[styles.bedLeg, { left: 8, backgroundColor: woodDeep }]} />
-          <View style={[styles.bedLeg, { right: 8, backgroundColor: woodDeep }]} />
-          <View style={[styles.bedHead, { backgroundColor: woodDeep }]}>
-            {[0, 1, 2].map((index) => (
-              <View key={index} style={[styles.bedSlat, { backgroundColor: woodTop }]} />
-            ))}
-          </View>
-          <View style={[styles.bedFrame, { backgroundColor: warmShade(woodDeep, -12, 0.3) }]} />
-          <View
-            style={[styles.bedMattress, { backgroundColor: world.linen, borderColor: warmShade(world.linen, -28) }]}
-          >
-            <View style={[styles.part, styles.bedSheet, { backgroundColor: withAlpha(world.rim, 0.45) }]} />
-          </View>
-          <View
-            style={[styles.bedPillow, { left: 12, backgroundColor: warmLight(world.linen, 12, 0.24) }]}
-          />
-          <View style={[styles.bedPillow, { left: 44, width: 26, backgroundColor: world.linen }]} />
-          <View style={[styles.bedThrow, { backgroundColor: accent, borderColor: accentDeep }]}>
-            <View style={[styles.part, styles.bedFold, { backgroundColor: withAlpha(world.shadow, 0.2) }]} />
-          </View>
-        </View>
-      );
-
-    case 'sofa':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(106, 0.32)}
-          <View style={[styles.sofaLeg, { left: 10, backgroundColor: woodDeep }]} />
-          <View style={[styles.sofaLeg, { right: 10, backgroundColor: woodDeep }]} />
-          <View style={[styles.sofaBack, { backgroundColor: accentDeep }]}>
-            <View
-              style={[styles.part, styles.sofaBackLit, { backgroundColor: withAlpha(accentLit, 0.26) }]}
-            />
-          </View>
-          <View style={[styles.sofaArm, { left: 0, backgroundColor: warmShade(accent, -18, 0.3) }]} />
-          <View style={[styles.sofaArm, { right: 0, backgroundColor: warmShade(accent, -18, 0.3) }]} />
-          <View style={[styles.sofaSeat, { backgroundColor: accent, borderColor: accentDeep }]}>
-            <View
-              style={[styles.part, styles.sofaCushion, { left: 14, backgroundColor: withAlpha(world.shadow, 0.15) }]}
-            />
-            <View
-              style={[styles.part, styles.sofaCushion, { left: 58, backgroundColor: withAlpha(world.shadow, 0.15) }]}
-            />
-          </View>
-        </View>
-      );
-
-    case 'altar':
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(64, 0.3)}
-          <View style={[styles.altarStep, { backgroundColor: warmShade(trim, -14, 0.34) }]} />
-          <View style={[styles.altarBody, { backgroundColor: trim }]}>
-            <View style={[styles.altarCarve, { backgroundColor: withAlpha(world.brass, 0.32) }]} />
-            <View style={[styles.altarCarve, { backgroundColor: withAlpha(world.brass, 0.22) }]} />
-          </View>
-          <View style={[styles.altarTop, { backgroundColor: warmLight(trim, 28, 0.3), borderColor: trim }]}>
-            <View style={[styles.part, styles.altarTopLit, { backgroundColor: withAlpha(world.rim, 0.2) }]} />
-          </View>
-          <View style={[styles.part, styles.altarHalo, { backgroundColor: withAlpha(world.glow, 0.26) }]} />
-          <View style={[styles.altarBowl, { backgroundColor: world.brass, borderColor: world.brassDark }]} />
-          <View style={[styles.altarFlame, { backgroundColor: world.glowSoft }]} />
-        </View>
-      );
-
-    case 'stage':
-      return (
-        <View style={wrapper} testID={id}>
-          <View style={[styles.part, styles.stageCone, { backgroundColor: withAlpha(world.glow, 0.1) }]} />
-          <View style={styles.stageLamps}>
-            <View style={[styles.stageLamp, { backgroundColor: world.brassDark }]}>
-              <View style={[styles.stageBulb, { backgroundColor: world.glowSoft }]} />
-            </View>
-            <View style={[styles.stageLamp, { backgroundColor: world.brassDark }]}>
-              <View style={[styles.stageBulb, { backgroundColor: world.glowSoft }]} />
-            </View>
-          </View>
-          <View style={[styles.stageFace, { backgroundColor: warmShade(accentDeep, -18, 0.4) }]}>
-            <View style={[styles.stageTrim, { backgroundColor: withAlpha(world.brass, 0.4) }]} />
-          </View>
-          <View
-            style={[styles.stageTop, { backgroundColor: mix(accent, world.walnut, 0.42), borderColor: accentDeep }]}
-          >
-            <View style={[styles.part, styles.stageTopLit, { backgroundColor: withAlpha(world.rim, 0.14) }]} />
-          </View>
-        </View>
-      );
-
-    case 'stones':
-    default:
-      return (
-        <View style={wrapper} testID={id}>
-          {shadow(52, 0.3)}
-          <View style={[styles.rockSmall, { backgroundColor: warmLight(rockTone(trim), 12, 0.3) }]} />
-          <View
-            style={[styles.rock, { backgroundColor: warmShade(rockTone(trim), -6, 0.3), borderColor: trim }]}
-          >
-            <View style={[styles.part, styles.rockLit, { backgroundColor: withAlpha(world.rim, 0.16) }]} />
-            <View style={[styles.part, styles.moss, { backgroundColor: withAlpha(world.sage, 0.5) }]} />
-          </View>
-        </View>
-      );
-  }
-}
-
-/** Stones in a room are the trim material, lifted toward sand so they read as rock. */
-function rockTone(trim: string): string {
-  return mix(trim, world.sand, 0.38);
 }
 
 /* ------------------------------------------------------------------ *
@@ -1375,6 +883,7 @@ export function Stage({
 
   const isNight = gameHour < 6 || gameHour >= 20;
   const isDusk = gameHour >= 17 && gameHour < 20;
+  const isDawn = gameHour >= 5 && gameHour < 8;
   const sky = skyGradient(gameHour);
   const ambient = ambientLight(gameHour);
 
@@ -1428,25 +937,13 @@ export function Stage({
                 />
               ))
             : null}
-          <View
-            style={[
-              styles.celestial,
-              {
-                top: isNight ? 22 : isDusk ? size.height * 0.16 : 16,
-                right: isNight ? size.width * 0.62 : size.width * 0.12,
-                backgroundColor: isNight ? '#E8E4D6' : isDusk ? '#E8A05C' : '#F0DDA8',
-              },
-            ]}
-          />
-          <View
-            style={[
-              styles.celestialHalo,
-              {
-                top: isNight ? 14 : isDusk ? size.height * 0.13 : 8,
-                right: isNight ? size.width * 0.62 - 8 : size.width * 0.12 - 8,
-                backgroundColor: withAlpha(isNight ? '#E8E4D6' : world.glow, 0.3),
-              },
-            ]}
+          <SunBloom
+            x={isNight ? size.width * 0.34 : size.width * 0.86}
+            y={isNight ? size.height * 0.09 : isDusk || isDawn ? size.height * 0.22 : size.height * 0.07}
+            size={isNight ? 150 : 280}
+            night={isNight}
+            dusk={isDusk}
+            dawn={isDawn}
           />
           {!isNight
             ? CLOUDS.map((cloud, index) => (
@@ -1501,6 +998,17 @@ export function Stage({
             wall={wall}
             hour={gameHour}
           />
+
+          {/* The beam each window throws across the boards, and the pane it
+              lands on. This is the light every resident is lit from. */}
+          <WindowLight
+            openings={openings}
+            wall={wall}
+            height={size.height}
+            floorHeight={floorHeight}
+            intensity={ambient.intensity}
+            warmth={ambient.warmth}
+          />
         </>
       )}
 
@@ -1513,6 +1021,7 @@ export function Stage({
             prop={prop}
             accent={room.accent}
             trim={room.trim}
+            index={index}
           />
         ))}
       </View>
@@ -1552,6 +1061,9 @@ export function Stage({
           </View>
         );
       })}
+
+      {/* Air: dust drifting through the room light. */}
+      <Dust width={size.width} height={size.height} intensity={ambient.intensity} />
 
       {/* Anomaly */}
       {anomalyVisible ? (
@@ -1635,16 +1147,10 @@ export function Stage({
         </View>
       </View>
 
-      {/* Room light over the whole frame, then the film vignette. */}
-      <LinearGradient
-        colors={[
-          withAlpha(world.haze, 0.1 * ambient.warmth),
-          'transparent',
-          withAlpha(world.shadow, 0.24 + (1 - ambient.intensity) * 0.22),
-        ]}
-        locations={[0, 0.45, 1]}
-        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
-      />
+      {/* One grade over the whole frame, then the near edge, then the film
+          vignette: sky, wall, boards and cast end up in the same photograph. */}
+      <HourGrade hour={gameHour} height={size.height} />
+      <ForegroundFrame roomType={type} width={size.width} height={size.height} hour={gameHour} />
       <LinearGradient
         colors={['rgba(24,12,5,0.42)', 'transparent', 'rgba(18,9,4,0.5)']}
         locations={[0, 0.45, 1]}

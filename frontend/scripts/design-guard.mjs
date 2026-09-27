@@ -137,9 +137,11 @@ const BANNED_PHRASES = [
   '10000+ joueurs',
 ];
 
-// A real price is an amount next to a currency, not the dollar sign of a
-// template literal, so `${value}` never trips this rule.
-const PRICE = /\d\s*[€£]|\d\s*\$|\bEUR\b|\bUSD\b/;
+// A real price is an amount next to a currency. The dollar sign that opens a
+// template literal is not a price, so it is excluded explicitly: a path like
+// `M 16 ${h - 20}` draws a table leg, and a line like "a partir de 29 $" still
+// fails the rule.
+const PRICE = /\d\s*[€£]|\d\s*\$(?!\{)|\bEUR\b|\bUSD\b/;
 
 for (const file of sourceFiles) {
   file.lines.forEach((line, index) => {

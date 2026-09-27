@@ -41,7 +41,7 @@ import type {
 } from '../game/types';
 import { glyph } from '../game/icons';
 import { Icon } from './Icon';
-import { ResidentSprite } from './ResidentSprite';
+import { ResidentPortrait, ResidentSprite } from './ResidentSprite';
 import {
   ActionButton,
   BodyText,
@@ -260,7 +260,7 @@ export function ResidentCard({
       ]}
     >
       <View style={styles.residentCardAvatar}>
-        <ResidentSprite resident={resident} scale={0.52} showName={false} />
+        <ResidentPortrait resident={resident} size={74} />
       </View>
       <View style={styles.residentCardBody}>
         <Row justify="space-between" align="center">
@@ -324,8 +324,8 @@ export function ResidentSheet({
       <View style={styles.sheetOverlay}>
         <View style={styles.sheet}>
           <View style={styles.sheetHeader}>
-            <Row gap={space.sm} align="center" style={styles.grow}>
-              <ResidentSprite resident={resident} scale={0.72} showName={false} />
+            <Row gap={space.md} align="center" style={styles.grow}>
+              <ResidentPortrait resident={resident} size={132} />
               <View style={styles.sheetHeaderText}>
                 <Text style={styles.sheetName}>{resident.name}</Text>
                 <Text style={styles.sheetMeta}>
@@ -1139,7 +1139,7 @@ const styles = StyleSheet.create({
     marginBottom: space.sm,
   },
   residentCardSelected: { borderColor: palette.accent, backgroundColor: 'rgba(78,157,180,0.10)' },
-  residentCardAvatar: { width: 52, height: 78, justifyContent: 'flex-end', alignItems: 'center' },
+  residentCardAvatar: { width: 66, height: 76, justifyContent: 'flex-start', alignItems: 'center' },
   residentCardBody: { flex: 1, minWidth: 0 },
   residentName: { ...typeTokens.title, color: palette.ink, flexShrink: 1 },
   residentMeta: { ...typeTokens.caption, color: palette.inkMuted, marginTop: 1 },
