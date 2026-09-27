@@ -1,13 +1,24 @@
-"""
-Backend tests for Build Mode + Guest Character Creation.
-Run: pytest /app/backend/tests/test_build_and_guest.py -v
+"""Backend tests for Build Mode + Guest Character Creation.
+
+These are live HTTP tests: start the backend first, then run
+``pytest tests/test_build_and_guest.py -v``. When no server answers they skip
+with an explanatory message instead of failing at collection time.
 """
 import os
+
 import pytest
 import requests
 
-BASE_URL = os.environ["EXPO_PUBLIC_BACKEND_URL"].rstrip("/")
+BASE_URL = os.environ.get(
+    "EXPO_PUBLIC_BACKEND_URL", "http://127.0.0.1:8000"
+).rstrip("/")
 API = f"{BASE_URL}/api"
+
+
+@pytest.fixture(autouse=True)
+def _require_live_server(live_api_url):
+    """Skip the whole module unless a backend is actually running."""
+    return live_api_url
 
 
 REQUIRED_CATALOG_FIELDS = {"id", "name", "emoji", "category", "size", "cost", "premium"}
@@ -215,17 +226,38 @@ class TestGuestCharacterCreation:
 
 # ==================== Regression ====================
 class TestRegression:
-    def test_three_default_npcs_present(self, api_client):
+    def test_the_original_six_residents_are_present(self, api_client):
+        api_client.post(f"{API}/reset")
         chars = api_client.get(f"{API}/characters").json()
         names = {c.get("name") for c in chars if c.get("is_npc")}
-        assert "Sophie Laurent" in names, f"Sophie missing. NPCs: {names}"
-        assert "Kenji Tanaka" in names, f"Kenji missing. NPCs: {names}"
-        assert "Marcus Johnson" in names, f"Marcus missing. NPCs: {names}"
+        expected = {
+            "Aya Sow",
+            "Tobias Lenz",
+            "Priya Raman",
+            "Elias Moreau",
+            "Mika Ono",
+            "Simón Ortega",
+        }
+        assert expected <= names, f"Missing residents: {expected - names}. Got: {names}"
 
     def test_simulate_still_works(self, api_client):
         r = api_client.post(f"{API}/simulate")
         assert r.status_code == 200, f"simulate failed: {r.text}"
+        body = r.json()
+        assert body.get("status") in ("success", "paused")
 
     def test_characters_total_includes_luna(self, api_client):
+        api_client.post(f"{API}/reset")
+        api_client.post(f"{API}/characters/create", json=LUNA_PAYLOAD)
         chars = api_client.get(f"{API}/characters").json()
-        assert len(chars) >= 4, f"Expected >=4 chars (3 NPCs + Luna), got {len(chars)}"
+        assert len(chars) >= 7, f"Expected >=7 chars (6 residents + Luna), got {len(chars)}"
+
+    def test_game_loop_is_reachable_over_http(self, api_client):
+        # Reset first: earlier tests in this module add characters to the world.
+        api_client.post(f"{API}/reset")
+        state = api_client.get(f"{API}/game/state").json()
+        assert len(state["residents"]) == 6
+        cycle = api_client.post(f"{API}/game/cycle").json()
+        assert cycle["state"]["cycle"] == state["cycle"] + 1
+        assert len(cycle["report"]["residents"]) == 6
+        assert cycle["report"]["chronicle"]
