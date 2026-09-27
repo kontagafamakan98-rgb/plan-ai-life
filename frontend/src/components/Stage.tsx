@@ -49,7 +49,8 @@ import {
   SPRITE_GROUND_INSET,
 } from './ResidentSprite';
 import { PROP_BOX, SceneryPropArt, type PropKind } from './Scenery';
-import { Dust, ForegroundFrame, HourGrade, SunBloom, WallDressing, WindowLight } from './Atmosphere';
+import { Dust, ForegroundFrame, HourGrade, SunBloom, WallDressing } from './Atmosphere';
+import { Room, depthScaleAt, floorXAt, floorYAt, geometryOf } from './Room';
 
 interface Prop {
   kind: PropKind;
@@ -219,16 +220,6 @@ const PLASTER: { x: number; y: number; w: number; h: number; o: number }[] = [
   { x: 0.44, y: 0.2, w: 0.36, h: 0.24, o: 0.12 },
   { x: 0.72, y: 0.44, w: 0.26, h: 0.26, o: 0.14 },
   { x: 0.24, y: 0.66, w: 0.28, h: 0.2, o: 0.1 },
-];
-
-/** Floor boards, near rows first. Widths grow toward the viewer. */
-const FLOOR_ROWS: { h: number; count: number; offset: number; tone: number }[] = [
-  { h: 0.1, count: 7, offset: 0, tone: 0.07 },
-  { h: 0.13, count: 6, offset: 0.5, tone: 0.02 },
-  { h: 0.17, count: 5, offset: 0.22, tone: 0.06 },
-  { h: 0.2, count: 4, offset: 0.68, tone: 0.01 },
-  { h: 0.2, count: 3, offset: 0.34, tone: 0.05 },
-  { h: 0.2, count: 3, offset: 0.82, tone: 0.02 },
 ];
 
 type GroundKind = 'grass' | 'sand' | 'rock' | 'cobble';
@@ -525,112 +516,6 @@ function Wall({
   );
 }
 
-/* ------------------------------------------------------------------ *
- * Floors
- * ------------------------------------------------------------------ */
-
-/**
- * Indoor floor: staggered boards in two oak tones, with the light that falls
- * through each window lying on top of them.
- */
-function PlankFloor({
-  room,
-  floorHeight,
-  openings,
-  wall,
-  hour,
-}: {
-  room: { floor: string; floorAlt: string; trim: string };
-  floorHeight: number;
-  openings: Opening[];
-  wall: { width: number; height: number };
-  hour: number;
-}) {
-  const ambient = ambientLight(hour);
-  let cursor = 0;
-  const rows = FLOOR_ROWS.map((row) => {
-    const top = cursor;
-    cursor += row.h;
-    return { ...row, top };
-  });
-
-  return (
-    <View style={[styles.floor, { height: floorHeight, backgroundColor: room.floor }]}>
-      {rows.map((row, rowIndex) => (
-        <View
-          key={rowIndex}
-          style={[styles.floorRow, { top: `${row.top * 100}%`, height: `${row.h * 100}%` }]}
-        >
-          {Array.from({ length: row.count }).map((_, index) => {
-            const width = 1 / row.count;
-            const left = row.offset * width + index * width - 0.08;
-            const dark = index % 2 === 0 ? row.tone : row.tone * 0.4;
-            return (
-              <View
-                key={index}
-                style={[
-                  styles.plank,
-                  {
-                    left: `${(left - 0.012) * 100}%`,
-                    width: `${(width + 0.024) * 100}%`,
-                    backgroundColor: mix(room.floorAlt, world.shadow, dark),
-                    borderBottomColor: withAlpha(world.shadow, 0.22),
-                  },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.plankGrain,
-                    {
-                      width: `${40 + ((index * 17 + rowIndex * 23) % 45)}%`,
-                      backgroundColor: withAlpha(world.shadow, 0.14),
-                    },
-                  ]}
-                />
-                <View style={[styles.plankTop, { backgroundColor: withAlpha(world.rim, 0.05) }]} />
-              </View>
-            );
-          })}
-        </View>
-      ))}
-
-      {/* Light pools under the openings. */}
-      {openings.map((rect, index) => (
-        <View
-          key={`pool-${index}`}
-          style={[
-            styles.lightPool,
-            {
-              left: (rect.x + rect.w / 2) * wall.width - rect.w * wall.width * 0.75,
-              width: rect.w * wall.width * 1.5,
-              height: floorHeight * 0.8,
-              opacity: 0.1 + ambient.intensity * 0.16,
-            },
-          , { pointerEvents: 'none' }]}
-        >
-          <LinearGradient
-            colors={['transparent', withAlpha(world.glow, 0.4), withAlpha(world.glow, 0.08)]}
-            locations={[0, 0.42, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-        </View>
-      ))}
-
-      {/* Warm haze where the floor meets the wall. */}
-      <LinearGradient
-        colors={[withAlpha(world.haze, 0.24), withAlpha(world.haze, 0.06), 'transparent']}
-        locations={[0, 0.35, 1]}
-        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
-      />
-      <LinearGradient
-        colors={['transparent', withAlpha(world.shadow, 0.34)]}
-        locations={[0.55, 1]}
-        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
-      />
-    </View>
-  );
-}
-
 /** Outdoor ground: grass, sand, rock slabs or cobbles, hazy at the horizon. */
 function Ground({
   kind,
@@ -811,23 +696,28 @@ function SceneryProp({
   accent,
   trim,
   index,
+  left,
+  bottom,
+  scale,
 }: {
   prop: Prop;
   accent: string;
   trim: string;
   index: number;
+  left: number;
+  bottom: number;
+  scale: number;
 }) {
   const box = PROP_BOX[prop.kind] ?? PROP_BOX.table;
-  const scale = prop.size ?? 1;
+  const size = (prop.size ?? 1) * scale;
   const wrapper: ViewStyle = {
     position: 'absolute',
-    left: `${prop.x * 100}%`,
-    top: `${prop.y * 100}%`,
+    left,
+    bottom,
     width: box.w,
     height: box.h,
     marginLeft: -box.w / 2,
-    marginTop: -box.h,
-    transform: [{ scale }],
+    transform: [{ scale: size }],
     transformOrigin: 'bottom center',
   };
 
@@ -887,9 +777,40 @@ export function Stage({
   const sky = skyGradient(gameHour);
   const ambient = ambientLight(gameHour);
 
-  const wallHeight = size.height * (outdoor ? 0.56 : 0.58);
+  // The geometry of the room: where the back wall stands, where the floor starts
+  // and how much of each side wall we see. Every placement below derives from
+  // it, so a prop can never float and a resident can never change size between
+  // two rooms without a reason.
+  const geometry = useMemo(() => geometryOf(size.width, size.height), [size]);
+  const wallHeight = outdoor ? size.height * 0.56 : geometry.wallBaseY;
   const floorHeight = size.height - wallHeight;
-  const wall = useMemo(() => ({ width: size.width, height: wallHeight }), [size.width, wallHeight]);
+  const wall = useMemo(
+    () =>
+      outdoor
+        ? { width: size.width, height: wallHeight }
+        : {
+            width: size.width - 2 * geometry.inset,
+            height: Math.max(80, wallHeight - geometry.ceilingY),
+          },
+    [geometry.ceilingY, geometry.inset, outdoor, size.width, wallHeight],
+  );
+
+  /** Where a point of the room lands on screen, and how big it looks there. */
+  const place = (x: number, y: number) => {
+    const depth = Math.max(0.04, Math.min(1.04, y));
+    if (outdoor) {
+      return {
+        cx: x * size.width,
+        cy: wallHeight + depth * floorHeight,
+        scale: 0.78 + 0.36 * depth,
+      };
+    }
+    return {
+      cx: floorXAt(geometry, x, depth),
+      cy: floorYAt(geometry, depth),
+      scale: depthScaleAt(depth),
+    };
+  };
 
   // Residents are depth-sorted so someone standing lower on the floor is drawn
   // in front of someone further back.
@@ -903,7 +824,11 @@ export function Stage({
     setSize({ width, height });
   };
 
-  const spriteScale = Math.max(0.6, Math.min(1.02, size.width / 640));
+  /**
+   * One scale for the whole cast, and the furniture keeps it too: a resident
+   * and the counter beside them have to agree about how big the room is.
+   */
+  const spriteScale = Math.max(0.72, Math.min(1.24, size.width / 560));
 
   return (
     <View
@@ -982,58 +907,53 @@ export function Stage({
         </>
       ) : (
         <>
-          <Wall roomType={type} room={room} wall={wall} sky={sky} hour={gameHour} />
-          <View
-            style={[
-              styles.skirting,
-              { top: wallHeight - 7, backgroundColor: mix(room.trim, world.oak, 0.4), borderColor: withAlpha(world.rim, 0.2) },
-            ]}
-          >
-            <View style={[styles.skirtingShade, { backgroundColor: withAlpha(world.shadow, 0.3) }]} />
-          </View>
-          <PlankFloor
-            room={room}
-            floorHeight={floorHeight}
-            openings={openings}
-            wall={wall}
-            hour={gameHour}
-          />
+          {/* The shell: ceiling, two side walls and a floor whose boards run to
+              the vanishing point. The beams of the windows are in there too. */}
+          <Room geometry={geometry} room={room} hour={gameHour} openings={openings} wall={wall} />
 
-          {/* The beam each window throws across the boards, and the pane it
-              lands on. This is the light every resident is lit from. */}
-          <WindowLight
-            openings={openings}
-            wall={wall}
-            height={size.height}
-            floorHeight={floorHeight}
-            intensity={ambient.intensity}
-            warmth={ambient.warmth}
-          />
+          {/* The back wall, inset, with its own plaster, openings and dressing. */}
+          <View
+            style={{
+              position: 'absolute',
+              left: geometry.inset,
+              top: geometry.ceilingY,
+              width: wall.width,
+              height: wall.height,
+              overflow: 'hidden',
+            }}
+          >
+            <Wall roomType={type} room={room} wall={wall} sky={sky} hour={gameHour} />
+          </View>
         </>
       )}
 
       {/* Scenery: everything stands on the boards, so the props share the
           floor band with the residents. */}
       <View testID="stage-scenery" style={[styles.scenery, { top: wallHeight, height: floorHeight }]}>
-        {scenery.map((prop, index) => (
-          <SceneryProp
-            key={`${prop.kind}-${index}`}
-            prop={prop}
-            accent={room.accent}
-            trim={room.trim}
-            index={index}
-          />
-        ))}
+        {scenery.map((prop, index) => {
+          const spot = place(prop.x, prop.y);
+          return (
+            <SceneryProp
+              key={`${prop.kind}-${index}`}
+              prop={prop}
+              accent={room.accent}
+              trim={room.trim}
+              index={index}
+              left={spot.cx}
+              bottom={size.height - spot.cy}
+              scale={spot.scale * spriteScale}
+            />
+          );
+        })}
       </View>
 
       {/* Residents */}
       {sorted.map((resident, index) => {
-        const depth = Math.round((resident.position?.y ?? 0.5) * 1000) + index;
         const depthY = resident.position?.y ?? 0.5;
-        // Anchored on the shoe line: the box is lifted by its own height, minus
-        // the part of it that sits below the feet (the name tag).
-        const feet = wallHeight + floorHeight * (0.12 + depthY * 0.78);
-        const boxWidth = SPRITE_BASE_WIDTH * spriteScale;
+        const spot = place(resident.position?.x ?? 0.5, depthY);
+        // Someone standing closer to the viewer is drawn bigger and in front.
+        const scale = spriteScale * spot.scale;
+        const boxWidth = SPRITE_BASE_WIDTH * scale;
         return (
           <View
             key={resident.id}
@@ -1041,17 +961,16 @@ export function Stage({
             style={[
               styles.residentSlot,
               {
-                left: `${Math.min(88, Math.max(4, (resident.position?.x ?? 0.5) * 100))}%`,
-                top: feet - (SPRITE_BASE_HEIGHT - SPRITE_GROUND_INSET) * spriteScale,
+                left: spot.cx - boxWidth / 2,
+                top: spot.cy - (SPRITE_BASE_HEIGHT - SPRITE_GROUND_INSET) * scale,
                 width: boxWidth,
-                marginLeft: -boxWidth / 2,
-                zIndex: 100 + depth,
+                zIndex: 100 + Math.round(depthY * 1000) + index,
               },
             ]}
           >
             <ResidentSprite
               resident={resident}
-              scale={spriteScale}
+              scale={scale}
               selected={selectedResidentId === resident.id}
               walking={walkingIds.includes(resident.id)}
               light={ambient.intensity}

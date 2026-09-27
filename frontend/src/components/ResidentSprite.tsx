@@ -20,7 +20,7 @@ import { withAlpha } from '../game/art';
 import { glyph } from '../game/icons';
 import { useI18n } from '../game/i18n';
 import type { Resident } from '../game/types';
-import { Figure, FigureEyes, FIGURE_BUST, FIGURE_EYE_REGION, moodOf } from './Figure';
+import { BUST_REGION, EYE_REGION, Figure, FigureEyes, moodOf } from './Figure';
 import { Icon } from './Icon';
 import { usePrefs } from './ui';
 
@@ -178,19 +178,15 @@ export function ResidentSprite({
             style={[
               sprite.eyes,
               {
-                left: FIGURE_EYE_REGION.x,
-                top: FIGURE_EYE_REGION.y,
-                width: FIGURE_EYE_REGION.width,
-                height: FIGURE_EYE_REGION.height,
+                left: EYE_REGION.x,
+                top: EYE_REGION.y,
+                width: EYE_REGION.width,
+                height: EYE_REGION.height,
                 transform: [{ rotate: `${mood.headTilt}deg` }, { scaleY: blink }],
               },
             ]}
           >
-            <FigureEyes
-              resident={resident}
-              width={FIGURE_EYE_REGION.width}
-              height={FIGURE_EYE_REGION.height}
-            />
+            <FigureEyes resident={resident} width={EYE_REGION.width} height={EYE_REGION.height} />
           </Animated.View>
 
           {/* Mood badge: the resident's instrument readout, over the world. */}
@@ -272,7 +268,7 @@ export function ResidentPortrait({
   resident: Resident;
   size?: number;
 }) {
-  const ratio = FIGURE_BUST.w / FIGURE_BUST.h;
+  const ratio = BUST_REGION.w / BUST_REGION.h;
   const width = Math.round(size * ratio);
   const moodColor = resident.mood_color ?? palette.accent;
   return (
