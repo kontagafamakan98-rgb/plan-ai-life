@@ -1,587 +1,334 @@
 #!/usr/bin/env python3
+"""ARCADIA-9 — standalone backend smoke check.
+
+The previous version of this file pointed at a hardcoded deployment URL that no
+longer exists and asserted on characters that have since been replaced, so it
+could never pass. This version targets a configurable local server and checks
+the surfaces that actually exist.
+
+Usage
+-----
+    # 1. start the backend
+    cd backend && python -m uvicorn server:app --host 127.0.0.1 --port 8000
+
+    # 2. in another terminal
+    python backend_test.py
+    python backend_test.py --url http://127.0.0.1:8000
+
+Exits non-zero if anything fails, so it is safe to use in a pipeline.
+For thorough coverage use pytest instead: ``cd backend && python -m pytest tests -q``.
 """
-Backend API Testing for Life Simulator
-Tests all endpoints with FREE AI (no LLM cost)
-"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from typing import Any, Callable, Dict, List
 
 import requests
-import json
-import sys
-from typing import Dict, Any
 
-# Base URL from environment
-BASE_URL = "https://sims-ai-sandbox.preview.emergentagent.com/api"
+RESIDENTS = {"res_aya", "res_tobias", "res_priya", "res_elias", "res_mika", "res_simon"}
+NEEDS = {"hunger", "energy", "social", "hygiene", "fun", "bladder", "comfort"}
+
+
+def _configure_output() -> None:
+    """Pick an encoding we can actually print to.
+
+    Windows consoles default to cp1252, where the status glyphs below cannot be
+    encoded at all -- the previous version of this script crashed on its very
+    first line of output for that reason.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
+
+def _can_encode(text: str) -> bool:
+    encoding = getattr(sys.stdout, "encoding", None) or "ascii"
+    try:
+        text.encode(encoding)
+        return True
+    except (UnicodeEncodeError, LookupError):
+        return False
+
+
+_configure_output()
+_GLYPHS = _can_encode("✅❌")
+OK_MARK = "✅" if _GLYPHS else "[OK]"
+FAIL_MARK = "❌" if _GLYPHS else "[XX]"
+
 
 class Colors:
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    END = '\033[0m'
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    DIM = "\033[2m"
+    END = "\033[0m"
 
-def print_test(name: str, passed: bool, details: str = ""):
-    status = f"{Colors.GREEN}✅ PASS{Colors.END}" if passed else f"{Colors.RED}❌ FAIL{Colors.END}"
-    print(f"{status} - {name}")
-    if details:
-        print(f"  {Colors.BLUE}Details:{Colors.END} {details}")
-    if not passed:
-        print()
 
-def test_health():
-    """Test GET /api/health"""
-    try:
-        response = requests.get(f"{BASE_URL}/health", timeout=10)
-        data = response.json()
-        
-        passed = (
-            response.status_code == 200 and
-            data.get("status") == "healthy"
-        )
-        
-        print_test(
-            "GET /api/health - Health check",
-            passed,
-            f"Status: {data.get('status')}" if passed else f"Response: {data}"
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/health - Health check", False, f"Error: {str(e)}")
-        return False
+class Checker:
+    """Tiny check runner: prints one line per check and tracks failures."""
 
-def test_root():
-    """Test GET /api/ - Should return FREE AI message"""
-    try:
-        response = requests.get(f"{BASE_URL}/", timeout=10)
-        data = response.json()
-        
-        # Check for FREE AI message
-        ai_info = data.get("ai", "")
-        has_free_ai = "FREE" in str(ai_info).upper() or "no LLM" in str(ai_info).lower()
-        
-        passed = (
-            response.status_code == 200 and
-            "message" in data and
-            has_free_ai
-        )
-        
-        print_test(
-            "GET /api/ - Root endpoint with FREE AI info",
-            passed,
-            f"Message: {data.get('message')}, AI: {data.get('ai')}" if passed else f"Response: {data}"
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/ - Root endpoint", False, f"Error: {str(e)}")
-        return False
+    def __init__(self) -> None:
+        self.passed = 0
+        self.failed = 0
+        self.failures: List[str] = []
 
-def test_characters():
-    """Test GET /api/characters - Should return 3 NPCs with full attributes"""
-    try:
-        response = requests.get(f"{BASE_URL}/characters", timeout=10)
-        data = response.json()
-        
-        # Check we have 3 characters
-        has_three = len(data) >= 3
-        
-        # Check for Sophie, Kenji, Marcus
-        names = [char.get("name", "") for char in data]
-        has_sophie = any("Sophie" in name for name in names)
-        has_kenji = any("Kenji" in name for name in names)
-        has_marcus = any("Marcus" in name for name in names)
-        
-        # Check first character has all required attributes
-        if data:
-            char = data[0]
-            attributes = char.get("attributes", {})
-            has_attributes = all(
-                attr in attributes 
-                for attr in ["intelligence", "strength", "charisma", "beauty", "creativity", "luck"]
-            )
-            has_personality = "personality" in char
-            has_hobbies = "hobbies" in char
-            has_objectives = "objectives" in char
+    def check(self, name: str, condition: bool, detail: str = "") -> bool:
+        if condition:
+            self.passed += 1
+            print(f"{Colors.GREEN}{OK_MARK} PASS{Colors.END} - {name}")
         else:
-            has_attributes = has_personality = has_hobbies = has_objectives = False
-        
-        passed = (
-            response.status_code == 200 and
-            has_three and
-            has_sophie and has_kenji and has_marcus and
-            has_attributes and has_personality and has_hobbies and has_objectives
-        )
-        
-        details = f"Found {len(data)} characters: {', '.join(names[:3])}"
-        if passed:
-            details += f" | Attributes: ✓ | Personality: ✓ | Hobbies: ✓ | Objectives: ✓"
-        
-        print_test(
-            "GET /api/characters - 3 NPCs with full attributes",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/characters", False, f"Error: {str(e)}")
-        return False
+            self.failed += 1
+            self.failures.append(name)
+            print(f"{Colors.RED}{FAIL_MARK} FAIL{Colors.END} - {name}")
+            if detail:
+                print(f"   {Colors.DIM}{detail}{Colors.END}")
+        return bool(condition)
 
-def test_locations():
-    """Test GET /api/locations - Should return 10 locations"""
+    def attempt(self, name: str, fn: Callable[[], Any]) -> Any:
+        """Run ``fn``; a raised exception becomes a failed check, not a crash."""
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001 - report anything, keep going
+            self.check(name, False, f"{type(exc).__name__}: {exc}")
+            return None
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="ARCADIA-9 backend smoke check")
+    parser.add_argument(
+        "--url",
+        default=(
+            os.environ.get("EXPO_PUBLIC_BACKEND_URL")
+            or os.environ.get("ARCADIA_BACKEND_URL")
+            or "http://127.0.0.1:8000"
+        ),
+        help="Base URL of the backend (default: http://127.0.0.1:8000)",
+    )
+    args = parser.parse_args()
+    api = args.url.rstrip("/") + "/api"
+
+    print(f"\n{Colors.BLUE}{'=' * 68}{Colors.END}")
+    print(f"{Colors.BLUE}ARCADIA-9 - backend smoke check{Colors.END}")
+    print(f"{Colors.BLUE}Target: {api}{Colors.END}")
+    print(f"{Colors.BLUE}{'=' * 68}{Colors.END}\n")
+
+    session = requests.Session()
+    session.headers.update({"Content-Type": "application/json"})
+    checker = Checker()
+
+    # --- reachability ----------------------------------------------------- #
     try:
-        response = requests.get(f"{BASE_URL}/locations", timeout=10)
-        data = response.json()
-        
-        # Check we have 10 locations
-        has_ten = len(data) >= 10
-        
-        # Check for specific locations mentioned in review
-        location_names = [loc.get("name", "").lower() for loc in data]
-        has_paris_cafe = any("paris" in name or "parisien" in name for name in location_names)
-        has_tokyo_apartment = any("tokyo" in name or "shibuya" in name for name in location_names)
-        
-        # Check structure
-        if data:
-            loc = data[0]
-            has_structure = all(
-                field in loc 
-                for field in ["id", "name", "description", "type", "city", "country", "emoji", "available_actions"]
-            )
-        else:
-            has_structure = False
-        
-        passed = (
-            response.status_code == 200 and
-            has_ten and
-            has_paris_cafe and has_tokyo_apartment and
-            has_structure
+        session.get(f"{api}/health", timeout=5)
+    except requests.RequestException as exc:
+        print(f"{Colors.RED}Backend unreachable at {api}: {exc}{Colors.END}")
+        print(
+            f"{Colors.YELLOW}Start it with:{Colors.END}\n"
+            f"  cd backend && python -m uvicorn server:app --host 127.0.0.1 --port 8000\n"
         )
-        
-        details = f"Found {len(data)} locations"
-        if passed:
-            details += f" | Paris cafe: ✓ | Tokyo apartment: ✓ | Structure: ✓"
-        
-        print_test(
-            "GET /api/locations - 10 locations with proper structure",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/locations", False, f"Error: {str(e)}")
-        return False
+        return 2
 
-def test_translations_fr():
-    """Test GET /api/translations/fr - French translations"""
-    try:
-        response = requests.get(f"{BASE_URL}/translations/fr", timeout=10)
-        data = response.json()
-        
-        # Check for French translations
-        has_french = (
-            data.get("app_name") is not None and
-            "intelligence" in data and
-            "strength" in data and
-            "charisma" in data and
-            "beauty" in data and
-            "creativity" in data and
-            "luck" in data
-        )
-        
-        # Check if translations are actually in French
-        is_french = (
-            data.get("strength") == "Force" or
-            data.get("beauty") == "Beauté" or
-            "Beauté" in str(data.values())
-        )
-        
-        passed = (
-            response.status_code == 200 and
-            has_french and
-            is_french
-        )
-        
-        details = f"Attributes found: intelligence, strength, charisma, beauty, creativity, luck"
-        if is_french:
-            details += " | Language: French ✓"
-        
-        print_test(
-            "GET /api/translations/fr - French translations with attributes",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/translations/fr", False, f"Error: {str(e)}")
-        return False
+    # --- health / meta ---------------------------------------------------- #
+    health = session.get(f"{api}/health", timeout=10).json()
+    checker.check("GET /api/health", health.get("status") == "healthy", str(health))
 
-def test_translations_en():
-    """Test GET /api/translations/en - English translations"""
-    try:
-        response = requests.get(f"{BASE_URL}/translations/en", timeout=10)
-        data = response.json()
-        
-        # Check for English translations
-        has_english = (
-            data.get("app_name") is not None and
-            "intelligence" in data and
-            "strength" in data and
-            "charisma" in data and
-            "beauty" in data and
-            "creativity" in data and
-            "luck" in data
-        )
-        
-        # Check if translations are in English
-        is_english = (
-            data.get("strength") == "Strength" and
-            data.get("beauty") == "Beauty"
-        )
-        
-        passed = (
-            response.status_code == 200 and
-            has_english and
-            is_english
-        )
-        
-        details = f"Attributes found: intelligence, strength, charisma, beauty, creativity, luck"
-        if is_english:
-            details += " | Language: English ✓"
-        
-        print_test(
-            "GET /api/translations/en - English translations with attributes",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/translations/en", False, f"Error: {str(e)}")
-        return False
+    identity = session.get(f"{api}/identity", timeout=10).json()
+    checker.check(
+        "GET /api/identity exposes the original brand",
+        identity.get("brand", {}).get("name") == "ARCADIA-9",
+    )
+    checker.check(
+        "GET /api/identity lists goals with 3 milestones each",
+        len(identity.get("goals", [])) == 12
+        and all(len(g["milestones"]) == 3 for g in identity["goals"]),
+    )
 
-def test_objectives():
-    """Test GET /api/objectives - Life objectives list"""
-    try:
-        response = requests.get(f"{BASE_URL}/objectives", timeout=10)
-        data = response.json()
-        
-        # Check it's a list with objectives
-        is_list = isinstance(data, list)
-        has_objectives = len(data) > 0 if is_list else False
-        
-        passed = (
-            response.status_code == 200 and
-            is_list and
-            has_objectives
+    # --- the game loop ---------------------------------------------------- #
+    reset = session.post(f"{api}/game/reset", timeout=10)
+    checker.check("POST /api/game/reset", reset.status_code == 200, reset.text)
+    state: Dict[str, Any] = reset.json()["state"]
+    checker.check(
+        "a fresh iteration starts at cycle 1 with 6 residents",
+        state["cycle"] == 1 and len(state["residents"]) == 6,
+        f"cycle={state.get('cycle')} residents={len(state.get('residents', []))}",
+    )
+    checker.check(
+        "residents are the six original characters",
+        {r["id"] for r in state["residents"]} == RESIDENTS,
+        str({r["id"] for r in state["residents"]}),
+    )
+    checker.check(
+        "every resident has needs in range and at least one goal",
+        all(
+            NEEDS == set(r["needs"]) and all(0 <= v <= 100 for v in r["needs"].values())
+            for r in state["residents"]
         )
-        
-        details = f"Found {len(data)} objectives" if is_list else f"Response: {data}"
-        if passed and len(data) > 0:
-            details += f" | Examples: {', '.join(data[:3])}"
-        
-        print_test(
-            "GET /api/objectives - Life objectives list",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/objectives", False, f"Error: {str(e)}")
-        return False
+        and all(len(r["goals"]) >= 2 for r in state["residents"]),
+    )
+    checker.check(
+        "a dilemma is queued for the player",
+        bool(state.get("pending_dilemma"))
+        and len(state["pending_dilemma"]["choices"]) >= 2,
+    )
 
-def test_hobbies():
-    """Test GET /api/hobbies - Hobbies list"""
-    try:
-        response = requests.get(f"{BASE_URL}/hobbies", timeout=10)
-        data = response.json()
-        
-        # Check it's a list with hobbies
-        is_list = isinstance(data, list)
-        has_hobbies = len(data) > 0 if is_list else False
-        
-        passed = (
-            response.status_code == 200 and
-            is_list and
-            has_hobbies
-        )
-        
-        details = f"Found {len(data)} hobbies" if is_list else f"Response: {data}"
-        if passed and len(data) > 0:
-            details += f" | Examples: {', '.join(data[:3])}"
-        
-        print_test(
-            "GET /api/hobbies - Hobbies list",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/hobbies", False, f"Error: {str(e)}")
-        return False
+    cycle = session.post(f"{api}/game/cycle", timeout=20).json()
+    report = cycle["report"]
+    checker.check(
+        "POST /api/game/cycle advances and reports every resident",
+        report["cycle"] == 1 and len(report["residents"]) == 6,
+    )
+    checker.check(
+        "each resident report contains an action, a thought and a reason",
+        all(
+            r["action"]["id"] and r["thought"]["fr"] and r["reason"]["fr"]
+            for r in report["residents"]
+        ),
+    )
+    checker.check("the chronicle is written", bool(report["chronicle"]))
 
-def test_simulate():
-    """Test POST /api/simulate - FREE AI simulation (no LLM calls)"""
-    try:
-        response = requests.post(f"{BASE_URL}/simulate", timeout=15)
-        data = response.json()
-        
-        # Check response structure
-        has_status = data.get("status") == "success"
-        has_results = "results" in data and isinstance(data["results"], list)
-        
-        # Check results have required fields
-        if has_results and len(data["results"]) > 0:
-            result = data["results"][0]
-            has_fields = all(
-                field in result 
-                for field in ["character_id", "name", "action", "thought", "mood", "location"]
-            )
-            
-            # Check thought is not empty (FREE AI should generate thoughts)
-            has_thought = result.get("thought", "") != ""
-        else:
-            has_fields = has_thought = False
-        
-        passed = (
-            response.status_code == 200 and
-            has_status and
-            has_results and
-            has_fields and
-            has_thought
+    # --- interventions ---------------------------------------------------- #
+    current = session.get(f"{api}/game/state", timeout=10).json()
+    affordable = [i for i in current["interventions"] if i["affordable"]]
+    if checker.check("interventions are offered", bool(affordable)):
+        chosen = affordable[0]
+        payload = {"id": chosen["id"]}
+        if chosen["target"] == "resident":
+            payload["target_id"] = current["residents"][0]["id"]
+        applied = session.post(f"{api}/game/intervention", json=payload, timeout=15)
+        checker.check(
+            f"POST /api/game/intervention ({chosen['id']})",
+            applied.status_code == 200,
+            applied.text,
         )
-        
-        details = f"Status: {data.get('status')}"
-        if has_results:
-            details += f" | Results: {len(data['results'])} characters"
-            if has_thought:
-                details += f" | Thoughts generated: ✓ (FREE AI working)"
-        
-        print_test(
-            "POST /api/simulate - FREE AI simulation (no LLM)",
-            passed,
-            details
+        bad = session.post(
+            f"{api}/game/intervention", json={"id": "does-not-exist"}, timeout=15
         )
-        return passed
-    except Exception as e:
-        print_test("POST /api/simulate", False, f"Error: {str(e)}")
-        return False
+        checker.check(
+            "an unknown intervention is rejected with 400", bad.status_code == 400
+        )
 
-def test_stripe_prices():
-    """Test GET /api/stripe/prices - Should return monthly and yearly pricing"""
-    try:
-        response = requests.get(f"{BASE_URL}/stripe/prices", timeout=10)
-        data = response.json()
-        
-        # Check response structure
-        has_prices = "prices" in data and isinstance(data["prices"], list)
-        
-        if has_prices:
-            prices = data["prices"]
-            # Find monthly and yearly plans
-            monthly = next((p for p in prices if p.get("interval") == "month"), None)
-            yearly = next((p for p in prices if p.get("interval") == "year"), None)
-            
-            has_monthly = monthly is not None and monthly.get("amount") == 4.99
-            has_yearly = yearly is not None and yearly.get("amount") == 39.99
-            
-            # Check structure
-            if monthly:
-                has_structure = all(
-                    field in monthly 
-                    for field in ["id", "name", "amount", "currency", "interval"]
-                )
-            else:
-                has_structure = False
-        else:
-            has_monthly = has_yearly = has_structure = False
-        
-        passed = (
-            response.status_code == 200 and
-            has_prices and
-            has_monthly and
-            has_yearly and
-            has_structure
+    # --- decisions -------------------------------------------------------- #
+    latest = session.get(f"{api}/game/state", timeout=10).json()
+    if latest.get("pending_dilemma"):
+        dilemma = latest["pending_dilemma"]
+        resolved = session.post(
+            f"{api}/game/dilemma",
+            json={"dilemma_id": dilemma["id"], "choice_id": dilemma["choices"][0]["id"]},
+            timeout=15,
         )
-        
-        details = ""
-        if has_monthly:
-            details += f"Monthly: ${monthly['amount']} USD"
-        if has_yearly:
-            details += f" | Yearly: ${yearly['amount']} USD"
-        if passed:
-            details += " | Structure: ✓"
-        
-        print_test(
-            "GET /api/stripe/prices - Stripe pricing",
-            passed,
-            details
+        checker.check(
+            "POST /api/game/dilemma applies a choice", resolved.status_code == 200
         )
-        return passed
-    except Exception as e:
-        print_test("GET /api/stripe/prices", False, f"Error: {str(e)}")
-        return False
 
-def test_stripe_subscription_status():
-    """Test GET /api/stripe/subscription-status - Should return subscription status"""
-    try:
-        response = requests.get(f"{BASE_URL}/stripe/subscription-status", timeout=10)
-        data = response.json()
-        
-        # Check response structure (without auth, should return default status)
-        has_is_premium = "is_premium" in data
-        has_subscription = "subscription" in data or "subscription_id" in data
-        
-        passed = (
-            response.status_code == 200 and
-            has_is_premium
-        )
-        
-        details = f"is_premium: {data.get('is_premium')}"
-        if "premium_until" in data:
-            details += f" | premium_until: {data.get('premium_until')}"
-        
-        print_test(
-            "GET /api/stripe/subscription-status - Subscription status",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/stripe/subscription-status", False, f"Error: {str(e)}")
-        return False
+    # --- pause ------------------------------------------------------------ #
+    paused = session.post(f"{api}/game/pause", json={"paused": True}, timeout=15)
+    checker.check(
+        "POST /api/game/pause freezes the iteration",
+        paused.status_code == 200 and paused.json()["paused"] is True,
+        paused.text,
+    )
+    refused = session.post(f"{api}/game/cycle", timeout=15)
+    checker.check(
+        "a paused iteration refuses to advance (409)",
+        refused.status_code == 409,
+        refused.text,
+    )
+    resumed = session.post(f"{api}/game/pause", json={"paused": False}, timeout=15)
+    checker.check(
+        "POST /api/game/pause resumes the iteration",
+        resumed.status_code == 200 and resumed.json()["paused"] is False,
+        resumed.text,
+    )
 
-def test_stripe_mock_subscribe_no_auth():
-    """Test POST /api/stripe/mock-subscribe - Should return 401 without auth"""
-    try:
-        response = requests.post(f"{BASE_URL}/stripe/mock-subscribe", timeout=10)
-        
-        # Should return 401 Unauthorized without authentication
-        passed = response.status_code == 401
-        
-        details = f"Status code: {response.status_code}"
-        if passed:
-            details += " | Auth required: ✓"
-        else:
-            details += f" | Expected 401, got {response.status_code}"
-        
-        print_test(
-            "POST /api/stripe/mock-subscribe - Auth required (401)",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("POST /api/stripe/mock-subscribe", False, f"Error: {str(e)}")
-        return False
+    # --- persistence ------------------------------------------------------ #
+    exported = session.get(f"{api}/game/save", timeout=15).json()
+    checker.check(
+        "GET /api/game/save exports a versioned iteration",
+        exported.get("format") == "arcadia-9/save" and exported["state"]["residents"],
+    )
+    loaded = session.post(
+        f"{api}/game/load", json={"state": exported["state"]}, timeout=15
+    )
+    checker.check(
+        "POST /api/game/load restores that iteration",
+        loaded.status_code == 200
+        and loaded.json()["state"]["cycle"] == exported["state"]["cycle"],
+    )
+    checker.check(
+        "an invalid save is rejected with 400",
+        session.post(f"{api}/game/load", json={"state": {}}, timeout=15).status_code
+        == 400,
+    )
 
-def test_move_character():
-    """Test POST /api/characters/npc_sophie/move - Move Sophie to Sydney Beach"""
-    try:
-        response = requests.post(
-            f"{BASE_URL}/characters/npc_sophie/move",
-            params={"location_id": "sydney_beach"},
-            timeout=10
-        )
-        data = response.json()
-        
-        # Check response
-        has_success = data.get("status") == "success"
-        correct_location = data.get("location") == "sydney_beach"
-        
-        passed = (
-            response.status_code == 200 and
-            has_success and
-            correct_location
-        )
-        
-        details = f"Status: {data.get('status')}, Location: {data.get('location')}"
-        
-        print_test(
-            "POST /api/characters/npc_sophie/move - Move Sophie to Sydney",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("POST /api/characters/npc_sophie/move", False, f"Error: {str(e)}")
-        return False
+    # --- preserved surface ------------------------------------------------ #
+    characters = session.get(f"{api}/characters", timeout=10).json()
+    checker.check(
+        "GET /api/characters still returns full character records",
+        len(characters) == 6
+        and all(
+            {"id", "name", "needs", "attributes", "personality", "objectives", "hobbies"}
+            <= set(c)
+            for c in characters
+        ),
+    )
+    locations = session.get(f"{api}/locations", timeout=10).json()
+    checker.check(
+        "GET /api/locations still returns the 31-place catalogue",
+        len(locations) == 31,
+        f"got {len(locations)}",
+    )
+    catalog = session.get(f"{api}/build/catalog", timeout=10).json()
+    checker.check(
+        "GET /api/build/catalog still returns 24 buildable items",
+        len(catalog) == 24,
+        f"got {len(catalog)}",
+    )
+    checker.check(
+        "GET /api/objectives and /api/hobbies are intact",
+        len(session.get(f"{api}/objectives", timeout=10).json()) == 12
+        and len(session.get(f"{api}/hobbies", timeout=10).json()) == 16,
+    )
+    checker.check(
+        "GET /api/translations/fr still serves French labels",
+        session.get(f"{api}/translations/fr", timeout=10).json().get("strength")
+        == "Force",
+    )
+    simulated = session.post(f"{api}/simulate", timeout=20).json()
+    checker.check(
+        "POST /api/simulate still answers in its historical shape",
+        simulated.get("status") in {"success", "paused"}
+        and (
+            simulated.get("status") == "paused"
+            or all("thought" in r for r in simulated.get("results", []))
+        ),
+    )
 
-def test_verify_character_location():
-    """Test GET /api/characters - Verify Sophie is at sydney_beach"""
-    try:
-        response = requests.get(f"{BASE_URL}/characters", timeout=10)
-        data = response.json()
-        
-        # Find Sophie
-        sophie = next((char for char in data if "sophie" in char.get("name", "").lower()), None)
-        
-        if sophie:
-            location_id = sophie.get("location_id")
-            at_sydney = location_id == "sydney_beach"
-        else:
-            at_sydney = False
-        
-        passed = (
-            response.status_code == 200 and
-            sophie is not None and
-            at_sydney
-        )
-        
-        details = ""
-        if sophie:
-            details = f"Sophie's location: {sophie.get('location_id')}"
-            if at_sydney:
-                details += " ✓"
-        else:
-            details = "Sophie not found"
-        
-        print_test(
-            "GET /api/characters - Verify Sophie at sydney_beach",
-            passed,
-            details
-        )
-        return passed
-    except Exception as e:
-        print_test("GET /api/characters - Verify location", False, f"Error: {str(e)}")
-        return False
+    # --- monetisation posture --------------------------------------------- #
+    offers = session.get(f"{api}/support/offers", timeout=10).json()
+    checker.check(
+        "GET /api/support/offers disables payments and states what it never gives",
+        offers.get("payments_enabled") is False
+        and all(o["never_grants"]["fr"] for o in offers["offers"]),
+    )
 
-def main():
-    print(f"\n{Colors.BLUE}{'='*70}{Colors.END}")
-    print(f"{Colors.BLUE}Life Simulator Backend API Tests - FREE AI + Stripe{Colors.END}")
-    print(f"{Colors.BLUE}Base URL: {BASE_URL}{Colors.END}")
-    print(f"{Colors.BLUE}{'='*70}{Colors.END}\n")
-    
-    tests = [
-        ("Health Check", test_health),
-        ("Root Endpoint", test_root),
-        ("Simulate (FREE AI)", test_simulate),
-        ("Stripe Prices", test_stripe_prices),
-        ("Stripe Subscription Status", test_stripe_subscription_status),
-        ("Stripe Mock Subscribe (No Auth)", test_stripe_mock_subscribe_no_auth),
-        ("Move Character to Sydney", test_move_character),
-        ("Verify Character Location", test_verify_character_location),
-        ("Characters", test_characters),
-        ("Locations", test_locations),
-        ("French Translations", test_translations_fr),
-        ("English Translations", test_translations_en),
-        ("Objectives", test_objectives),
-        ("Hobbies", test_hobbies),
-    ]
-    
-    results = []
-    for name, test_func in tests:
-        results.append(test_func())
-    
-    # Summary
-    passed = sum(results)
-    total = len(results)
-    
-    print(f"\n{Colors.BLUE}{'='*70}{Colors.END}")
-    if passed == total:
-        print(f"{Colors.GREEN}✅ ALL TESTS PASSED: {passed}/{total}{Colors.END}")
+    # --- summary ---------------------------------------------------------- #
+    total = checker.passed + checker.failed
+    print(f"\n{Colors.BLUE}{'=' * 68}{Colors.END}")
+    if checker.failed == 0:
+        print(f"{Colors.GREEN}ALL CHECKS PASSED: {checker.passed}/{total}{Colors.END}")
     else:
-        print(f"{Colors.YELLOW}⚠️  TESTS PASSED: {passed}/{total}{Colors.END}")
-        print(f"{Colors.RED}❌ TESTS FAILED: {total - passed}/{total}{Colors.END}")
-    print(f"{Colors.BLUE}{'='*70}{Colors.END}\n")
-    
-    return 0 if passed == total else 1
+        print(f"{Colors.YELLOW}PASSED: {checker.passed}/{total}{Colors.END}")
+        print(f"{Colors.RED}FAILED: {checker.failed}/{total}{Colors.END}")
+        for name in checker.failures:
+            print(f"{Colors.RED}  • {name}{Colors.END}")
+    print(f"{Colors.BLUE}{'=' * 68}{Colors.END}\n")
+    return 0 if checker.failed == 0 else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

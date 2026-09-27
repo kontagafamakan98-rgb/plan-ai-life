@@ -1,9 +1,14 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Header
+from fastapi import FastAPI, APIRouter, Body, HTTPException, Depends, Header
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
+import hashlib
+import hmac
 import os
 import logging
+import secrets
+import sys
+from base64 import urlsafe_b64decode, urlsafe_b64encode
+from contextlib import asynccontextmanager
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
@@ -11,28 +16,113 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import random
 import json
-import bcrypt
-import jwt
-import httpx
-import stripe
-from bson import ObjectId
 
 ROOT_DIR = Path(__file__).parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'life_simulator')]
+from arcadia import api as arcadia_api  # noqa: E402
+from arcadia import content as arcadia_content  # noqa: E402
+from arcadia import engine as arcadia_engine  # noqa: E402
+from arcadia import legacy as arcadia_legacy  # noqa: E402
+from arcadia import store as arcadia_store  # noqa: E402
 
-JWT_SECRET = os.environ.get('JWT_SECRET', 'default_secret_change_me')
+# ---------------------------------------------------------------------------
+# Optional third-party integrations.
+# The game must boot and be fully playable without any of them, so each import
+# degrades gracefully instead of crashing the process at start-up.
+# ---------------------------------------------------------------------------
+try:  # pragma: no cover - depends on the deployment image
+    import bcrypt
+
+    HAS_BCRYPT = True
+except ImportError:  # pragma: no cover
+    bcrypt = None
+    HAS_BCRYPT = False
+
+try:  # pragma: no cover
+    import jwt
+
+    HAS_PYJWT = True
+except ImportError:  # pragma: no cover
+    jwt = None
+    HAS_PYJWT = False
+
+try:  # pragma: no cover
+    import httpx
+
+    HAS_HTTPX = True
+except ImportError:  # pragma: no cover
+    httpx = None
+    HAS_HTTPX = False
+
+try:  # pragma: no cover
+    import stripe
+
+    HAS_STRIPE = True
+except ImportError:  # pragma: no cover
+    stripe = None
+    HAS_STRIPE = False
+
+try:  # pragma: no cover
+    from bson import ObjectId
+
+    HAS_BSON = True
+except ImportError:  # pragma: no cover
+
+    class ObjectId(str):  # type: ignore[misc]
+        """Fallback used only for ``isinstance`` checks in ``serialize_doc``."""
+
+    HAS_BSON = False
+
+# ---------------------------------------------------------------------------
+# Persistence.
+# Default is an atomic local JSON save file, so `uvicorn server:app` works with
+# nothing else installed. Set MONGO_URL to switch to MongoDB; if it is set but
+# unreachable we log a warning and keep playing on the local save.
+# ---------------------------------------------------------------------------
+db = arcadia_store.json_store()
+
+JWT_SECRET = os.environ.get('JWT_SECRET') or secrets.token_urlsafe(32)
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 
-# Initialize Stripe
-stripe.api_key = STRIPE_SECRET_KEY
+if HAS_STRIPE and STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    """Resolve persistence, make sure the world exists, release on shutdown.
+
+    Declared before the app so it can be handed straight to ``FastAPI``; the
+    helpers it calls live further down the module and are resolved at runtime.
+    """
+    global db
+    resolved = await arcadia_store.get_db()
+    if resolved is not None:
+        db = resolved
+    await _seed_locations()
+    state = await db.game_state.find_one({"id": "main"})
+    if not state:
+        locations = await db.locations.find().to_list(100)
+        await db.game_state.update_one(
+            {"id": "main"},
+            {"$set": arcadia_engine.new_state(locations)},
+            upsert=True,
+        )
+        logger.info("[startup] New iteration created.")
+    logger.info("[startup] %s ready.", arcadia_content.BRAND["name"])
+    try:
+        yield
+    finally:
+        arcadia_store.close_mongo_client()
+
 
 # Create the main app
-app = FastAPI(title="Life - Simulateur de Vie")
+app = FastAPI(
+    title=arcadia_content.BRAND["name"] + " : simulateur de vies",
+    lifespan=lifespan,
+)
 api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO)
@@ -227,7 +317,7 @@ class Character(BaseModel):
     occupation: str = "unemployed"
     education: str = "none"
     bio: str = ""
-    avatar_emoji: str = "😊"
+    avatar_icon: str = "avatar-neutral"
     appearance: CharacterAppearance = Field(default_factory=CharacterAppearance)
     attributes: CharacterAttributes = Field(default_factory=CharacterAttributes)
     personality: CharacterPersonality = Field(default_factory=CharacterPersonality)
@@ -252,7 +342,7 @@ class Character(BaseModel):
     thoughts: List[str] = Field(default_factory=list)
     memory: List[str] = Field(default_factory=list)
     is_npc: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CharacterCreate(BaseModel):
     name: str
@@ -289,7 +379,7 @@ class Location(BaseModel):
     type: str
     city: str
     country: str
-    emoji: str
+    icon: str
     available_actions: List[str] = Field(default_factory=list)
     objects: List[str] = Field(default_factory=list)
     is_premium: bool = False
@@ -303,7 +393,7 @@ class User(BaseModel):
     language: str = "en"
     is_premium: bool = False
     characters: List[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class UserRegister(BaseModel):
     email: str
@@ -320,11 +410,11 @@ class ChatMessage(BaseModel):
     sender_id: str
     sender_name: str
     content: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class WorldState(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    game_time: datetime = Field(default_factory=datetime.utcnow)
+    game_time: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     time_speed: float = 1.0
     is_paused: bool = False
     current_weather: str = "sunny"
@@ -347,190 +437,190 @@ HOBBIES_LIST = [
 DEFAULT_LOCATIONS = [
     Location(
         id="paris_cafe", name="Le Petit Parisien", description="A cozy Parisian cafe",
-        type="cafe", city="Paris", country="France", emoji="☕",
+        type="cafe", city="Paris", country="France", icon="cafe",
         available_actions=["drink_coffee", "eat_croissant", "read_newspaper", "chat_with_others", "work_on_laptop", "people_watch", "flirt"],
         objects=["espresso_machine", "pastry_display", "chairs", "newspapers"]
     ),
     Location(
         id="tokyo_apartment", name="Shibuya Apartment", description="A modern Tokyo apartment",
-        type="apartment", city="Tokyo", country="Japan", emoji="🏠",
+        type="apartment", city="Tokyo", country="Japan", icon="apartment",
         available_actions=["sleep", "cook_meal", "watch_tv", "take_shower", "use_toilet", "relax", "exercise", "study", "play_games"],
         objects=["futon", "kitchen", "tv", "bathroom", "gaming_console"]
     ),
     Location(
         id="nyc_office", name="Manhattan Tech Hub", description="A modern office building",
-        type="office", city="New York", country="USA", emoji="💼",
+        type="office", city="New York", country="USA", icon="office",
         available_actions=["work", "attend_meeting", "coffee_break", "network", "brainstorm", "lunch"],
         objects=["desks", "meeting_rooms", "coffee_machine"]
     ),
     Location(
         id="london_park", name="Hyde Park", description="A beautiful green park",
-        type="park", city="London", country="UK", emoji="🌳",
+        type="park", city="London", country="UK", icon="park",
         available_actions=["jog", "walk", "have_picnic", "feed_ducks", "read_book", "meet_friends", "yoga", "play_frisbee"],
         objects=["benches", "lake", "pathways", "gardens"]
     ),
     Location(
         id="barcelona_gym", name="FitLife Barcelona", description="A modern fitness center",
-        type="gym", city="Barcelona", country="Spain", emoji="💪",
+        type="gym", city="Barcelona", country="Spain", icon="gym",
         available_actions=["lift_weights", "cardio", "swim", "yoga_class", "sauna", "boxing"],
         objects=["weights", "treadmills", "pool", "sauna"]
     ),
     Location(
         id="rome_restaurant", name="Trattoria Da Nonna", description="An Italian restaurant",
-        type="restaurant", city="Rome", country="Italy", emoji="🍝",
+        type="restaurant", city="Rome", country="Italy", icon="restaurant",
         available_actions=["eat_dinner", "drink_wine", "romantic_date", "celebrate", "socialize"],
         objects=["tables", "wine_cellar", "kitchen"]
     ),
     Location(
         id="berlin_club", name="Berghain Underground", description="A legendary techno club",
-        type="club", city="Berlin", country="Germany", emoji="🎵",
+        type="club", city="Berlin", country="Germany", icon="club",
         available_actions=["dance", "drink", "meet_people", "enjoy_music", "flirt", "party"],
         objects=["dance_floor", "bars", "dj_booth"],
         is_premium=True
     ),
     Location(
         id="sydney_beach", name="Bondi Beach", description="The iconic Australian beach",
-        type="beach", city="Sydney", country="Australia", emoji="🏖️",
+        type="beach", city="Sydney", country="Australia", icon="beach",
         available_actions=["swim", "surf", "sunbathe", "volleyball", "build_sandcastle", "relax"],
         objects=["beach", "surf_boards", "umbrellas"]
     ),
     Location(
         id="school", name="International School", description="A school for learning",
-        type="school", city="Various", country="International", emoji="🏫",
+        type="school", city="Various", country="International", icon="school",
         available_actions=["study", "attend_class", "homework", "make_friends", "sports", "lunch"],
         objects=["classrooms", "library", "cafeteria"]
     ),
     Location(
         id="hospital", name="City Hospital", description="A medical center",
-        type="hospital", city="Various", country="International", emoji="🏥",
+        type="hospital", city="Various", country="International", icon="hospital",
         available_actions=["checkup", "visit_patient", "have_baby", "rest"],
         objects=["rooms", "pharmacy", "maternity_ward"]
     ),
     # ---- New countries / iconic landmarks (20+ countries world map) ----
     Location(
         id="dubai_mall", name="Dubai Mall", description="The world's largest shopping mall",
-        type="market", city="Dubai", country="UAE", emoji="🏬",
+        type="market", city="Dubai", country="UAE", icon="market",
         available_actions=["shopping", "watch_fountain", "luxury_dining", "skating", "people_watch"],
         objects=["boutiques", "aquarium", "fountain", "food_court"], is_premium=True
     ),
     Location(
         id="rio_beach", name="Copacabana Beach", description="Iconic Brazilian beach",
-        type="beach", city="Rio de Janeiro", country="Brazil", emoji="🏝️",
+        type="beach", city="Rio de Janeiro", country="Brazil", icon="beach",
         available_actions=["sunbathe", "samba_dance", "volleyball", "drink_caipirinha", "surf"],
         objects=["sand", "kiosks", "umbrellas"]
     ),
     Location(
         id="mumbai_market", name="Crawford Market", description="A bustling Indian bazaar",
-        type="market", city="Mumbai", country="India", emoji="🧺",
+        type="market", city="Mumbai", country="India", icon="market",
         available_actions=["bargain", "buy_spices", "eat_street_food", "chai_break", "people_watch"],
         objects=["stalls", "spices", "fabrics", "street_food"]
     ),
     Location(
         id="cairo_museum", name="Egyptian Museum", description="Home to ancient pharaohs",
-        type="museum", city="Cairo", country="Egypt", emoji="🏛️",
+        type="museum", city="Cairo", country="Egypt", icon="museum",
         available_actions=["admire_art", "study_history", "guided_tour", "photograph", "meditate"],
         objects=["mummies", "sarcophagi", "papyrus", "artifacts"]
     ),
     Location(
         id="seoul_cinema", name="CGV Yongsan", description="A massive Korean cinema complex",
-        type="cinema", city="Seoul", country="South Korea", emoji="🎬",
+        type="cinema", city="Seoul", country="South Korea", icon="cinema",
         available_actions=["watch_movie", "eat_popcorn", "first_date", "discuss_film", "vr_experience"],
         objects=["screens", "snack_bar", "vr_room"]
     ),
     Location(
         id="kyoto_temple", name="Kinkaku-ji", description="The Golden Pavilion",
-        type="temple", city="Kyoto", country="Japan", emoji="⛩️",
+        type="temple", city="Kyoto", country="Japan", icon="temple",
         available_actions=["meditate", "pray", "tea_ceremony", "garden_walk", "photograph"],
         objects=["pagoda", "koi_pond", "bonsai", "incense"]
     ),
     Location(
         id="himalaya_mountain", name="Everest Base Camp", description="The roof of the world",
-        type="mountain", city="Khumbu", country="Nepal", emoji="🏔️",
+        type="mountain", city="Khumbu", country="Nepal", icon="mountain",
         available_actions=["hike", "climb", "stargaze", "meditate", "yak_ride"],
         objects=["tents", "prayer_flags", "yaks", "summit"], is_premium=True
     ),
     Location(
         id="amsterdam_park", name="Vondelpark", description="The lungs of Amsterdam",
-        type="park", city="Amsterdam", country="Netherlands", emoji="🌷",
+        type="park", city="Amsterdam", country="Netherlands", icon="park",
         available_actions=["cycle", "picnic", "feed_swans", "rollerblade", "open_air_concert"],
         objects=["canals", "tulips", "bikes", "windmill"]
     ),
     Location(
         id="bangkok_market", name="Chatuchak Market", description="Asia's largest weekend market",
-        type="market", city="Bangkok", country="Thailand", emoji="🍜",
+        type="market", city="Bangkok", country="Thailand", icon="market",
         available_actions=["eat_pad_thai", "haggle", "buy_silk", "drink_coconut", "explore"],
         objects=["stalls", "street_food", "souvenirs"]
     ),
     Location(
         id="mexico_cathedral", name="Metropolitan Cathedral", description="Heart of Mexico City",
-        type="temple", city="Mexico City", country="Mexico", emoji="⛪",
+        type="temple", city="Mexico City", country="Mexico", icon="temple",
         available_actions=["pray", "light_candle", "tour_architecture", "reflect", "confession"],
         objects=["altars", "frescoes", "bells"]
     ),
     Location(
         id="capetown_safari", name="Table Mountain", description="A South African natural wonder",
-        type="mountain", city="Cape Town", country="South Africa", emoji="🦁",
+        type="mountain", city="Cape Town", country="South Africa", icon="mountain",
         available_actions=["hike", "cable_car", "spot_wildlife", "photograph", "picnic"],
         objects=["cable_car", "rocks", "viewpoint"]
     ),
     Location(
         id="istanbul_bazaar", name="Grand Bazaar", description="A historic Turkish bazaar",
-        type="market", city="Istanbul", country="Turkey", emoji="🕌",
+        type="market", city="Istanbul", country="Turkey", icon="market",
         available_actions=["drink_tea", "buy_rugs", "haggle", "smoke_hookah", "eat_baklava"],
         objects=["lamps", "carpets", "spices", "tea"]
     ),
     Location(
         id="toronto_office", name="CN Tower Offices", description="A skyscraper office in Canada",
-        type="office", city="Toronto", country="Canada", emoji="🏙️",
+        type="office", city="Toronto", country="Canada", icon="office",
         available_actions=["work", "skyline_view", "coffee_break", "elevator_ride", "network"],
         objects=["desks", "glass_floor", "telescope"]
     ),
     Location(
         id="buenos_aires_club", name="Tango Milonga", description="A passionate tango club",
-        type="club", city="Buenos Aires", country="Argentina", emoji="💃",
+        type="club", city="Buenos Aires", country="Argentina", icon="club",
         available_actions=["dance_tango", "drink_malbec", "flirt", "live_music", "romance"],
         objects=["dance_floor", "stage", "bar"]
     ),
     Location(
         id="stockholm_park", name="Djurgården", description="A royal island of nature",
-        type="park", city="Stockholm", country="Sweden", emoji="❄️",
+        type="park", city="Stockholm", country="Sweden", icon="park",
         available_actions=["walk", "ski", "fika_break", "ice_skate", "spot_moose"],
         objects=["forest", "lake", "deer"]
     ),
     Location(
         id="lisbon_cafe", name="A Brasileira", description="A historic Portuguese cafe",
-        type="cafe", city="Lisbon", country="Portugal", emoji="🍷",
+        type="cafe", city="Lisbon", country="Portugal", icon="cafe",
         available_actions=["drink_espresso", "eat_pastel_de_nata", "read_poetry", "people_watch", "chat"],
         objects=["pastries", "tiles", "patio"]
     ),
     Location(
         id="alps_mountain", name="Matterhorn", description="The iconic Swiss Alps",
-        type="mountain", city="Zermatt", country="Switzerland", emoji="⛰️",
+        type="mountain", city="Zermatt", country="Switzerland", icon="mountain",
         available_actions=["ski", "snowboard", "hike", "fondue_dinner", "stargaze"],
         objects=["snow", "chalets", "cable_car"]
     ),
     Location(
         id="athens_temple", name="Parthenon", description="An ancient Greek wonder",
-        type="temple", city="Athens", country="Greece", emoji="🏛️",
+        type="temple", city="Athens", country="Greece", icon="temple",
         available_actions=["admire_history", "philosophize", "photograph", "study", "reflect"],
         objects=["columns", "ruins", "view"]
     ),
     Location(
         id="bali_beach", name="Kuta Beach", description="A tropical Indonesian paradise",
-        type="beach", city="Bali", country="Indonesia", emoji="🌴",
+        type="beach", city="Bali", country="Indonesia", icon="beach",
         available_actions=["surf", "yoga_sunset", "drink_coconut", "scuba_dive", "spa"],
         objects=["waves", "palms", "loungers"]
     ),
     Location(
         id="moscow_museum", name="Bolshoi Theatre", description="A legendary Russian theatre",
-        type="museum", city="Moscow", country="Russia", emoji="🎭",
+        type="museum", city="Moscow", country="Russia", icon="museum",
         available_actions=["watch_ballet", "opera", "applaud", "champagne_intermission", "admire_art"],
         objects=["stage", "balconies", "chandeliers"], is_premium=True
     ),
     # User-owned buildable location
     Location(
         id="my_home", name="My Home", description="Your personal home you can fully customize",
-        type="apartment", city="Anywhere", country="Yours", emoji="🏡",
+        type="apartment", city="Anywhere", country="Yours", icon="apartment",
         available_actions=["sleep", "cook_meal", "watch_tv", "take_shower", "use_toilet", "relax", "exercise", "play_games", "read", "host_party"],
         objects=["sofa", "bed", "kitchen", "tv", "garden"]
     ),
@@ -539,31 +629,31 @@ DEFAULT_LOCATIONS = [
 # ==================== BUILDABLE OBJECTS CATALOG ====================
 BUILD_CATALOG = [
     # Free items
-    {"id": "sofa", "name": "Sofa", "emoji": "🛋️", "category": "furniture", "size": 2, "cost": 100, "premium": False},
-    {"id": "bed", "name": "Bed", "emoji": "🛏️", "category": "furniture", "size": 2, "cost": 150, "premium": False},
-    {"id": "chair", "name": "Chair", "emoji": "🪑", "category": "furniture", "size": 1, "cost": 30, "premium": False},
-    {"id": "table", "name": "Table", "emoji": "🪟", "category": "furniture", "size": 2, "cost": 80, "premium": False},
-    {"id": "lamp", "name": "Lamp", "emoji": "💡", "category": "decor", "size": 1, "cost": 25, "premium": False},
-    {"id": "plant", "name": "Plant", "emoji": "🪴", "category": "decor", "size": 1, "cost": 20, "premium": False},
-    {"id": "tv", "name": "TV", "emoji": "📺", "category": "electronics", "size": 2, "cost": 250, "premium": False},
-    {"id": "kitchen", "name": "Kitchen", "emoji": "🍳", "category": "appliance", "size": 3, "cost": 500, "premium": False},
-    {"id": "bathroom", "name": "Bathroom", "emoji": "🚽", "category": "appliance", "size": 2, "cost": 350, "premium": False},
-    {"id": "bookshelf", "name": "Bookshelf", "emoji": "📚", "category": "furniture", "size": 1, "cost": 90, "premium": False},
-    {"id": "tree", "name": "Tree", "emoji": "🌳", "category": "outdoor", "size": 2, "cost": 50, "premium": False},
-    {"id": "flowers", "name": "Flowers", "emoji": "🌷", "category": "outdoor", "size": 1, "cost": 15, "premium": False},
-    {"id": "fence", "name": "Fence", "emoji": "🚧", "category": "outdoor", "size": 1, "cost": 40, "premium": False},
-    {"id": "rug", "name": "Rug", "emoji": "🟫", "category": "decor", "size": 2, "cost": 60, "premium": False},
-    # Premium items 👑
-    {"id": "pool", "name": "Swimming Pool", "emoji": "🏊", "category": "luxury", "size": 4, "cost": 2500, "premium": True},
-    {"id": "jacuzzi", "name": "Jacuzzi", "emoji": "🛁", "category": "luxury", "size": 2, "cost": 1500, "premium": True},
-    {"id": "piano", "name": "Grand Piano", "emoji": "🎹", "category": "luxury", "size": 3, "cost": 1800, "premium": True},
-    {"id": "fireplace", "name": "Fireplace", "emoji": "🔥", "category": "luxury", "size": 2, "cost": 900, "premium": True},
-    {"id": "aquarium", "name": "Aquarium", "emoji": "🐠", "category": "luxury", "size": 2, "cost": 1100, "premium": True},
-    {"id": "billiard", "name": "Billiard Table", "emoji": "🎱", "category": "luxury", "size": 3, "cost": 1200, "premium": True},
-    {"id": "bar", "name": "Home Bar", "emoji": "🍸", "category": "luxury", "size": 2, "cost": 1300, "premium": True},
-    {"id": "gym_equipment", "name": "Home Gym", "emoji": "🏋️", "category": "luxury", "size": 3, "cost": 1700, "premium": True},
-    {"id": "art", "name": "Modern Art", "emoji": "🖼️", "category": "luxury", "size": 1, "cost": 800, "premium": True},
-    {"id": "robot", "name": "Robot Butler", "emoji": "🤖", "category": "luxury", "size": 1, "cost": 3000, "premium": True},
+    {"id": "sofa", "name": "Sofa", "icon": "sofa", "category": "furniture", "size": 2, "cost": 100, "premium": False},
+    {"id": "bed", "name": "Bed", "icon": "bed", "category": "furniture", "size": 2, "cost": 150, "premium": False},
+    {"id": "chair", "name": "Chair", "icon": "chair", "category": "furniture", "size": 1, "cost": 30, "premium": False},
+    {"id": "table", "name": "Table", "icon": "table", "category": "furniture", "size": 2, "cost": 80, "premium": False},
+    {"id": "lamp", "name": "Lamp", "icon": "lamp", "category": "decor", "size": 1, "cost": 25, "premium": False},
+    {"id": "plant", "name": "Plant", "icon": "plant", "category": "decor", "size": 1, "cost": 20, "premium": False},
+    {"id": "tv", "name": "TV", "icon": "tv", "category": "electronics", "size": 2, "cost": 250, "premium": False},
+    {"id": "kitchen", "name": "Kitchen", "icon": "kitchen", "category": "appliance", "size": 3, "cost": 500, "premium": False},
+    {"id": "bathroom", "name": "Bathroom", "icon": "bathroom", "category": "appliance", "size": 2, "cost": 350, "premium": False},
+    {"id": "bookshelf", "name": "Bookshelf", "icon": "bookshelf", "category": "furniture", "size": 1, "cost": 90, "premium": False},
+    {"id": "tree", "name": "Tree", "icon": "tree", "category": "outdoor", "size": 2, "cost": 50, "premium": False},
+    {"id": "flowers", "name": "Flowers", "icon": "flowers", "category": "outdoor", "size": 1, "cost": 15, "premium": False},
+    {"id": "fence", "name": "Fence", "icon": "fence", "category": "outdoor", "size": 1, "cost": 40, "premium": False},
+    {"id": "rug", "name": "Rug", "icon": "rug", "category": "decor", "size": 2, "cost": 60, "premium": False},
+    # Paid add-ons for the legacy catalogue.
+    {"id": "pool", "name": "Swimming Pool", "icon": "pool", "category": "luxury", "size": 4, "cost": 2500, "premium": True},
+    {"id": "jacuzzi", "name": "Jacuzzi", "icon": "jacuzzi", "category": "luxury", "size": 2, "cost": 1500, "premium": True},
+    {"id": "piano", "name": "Grand Piano", "icon": "piano", "category": "luxury", "size": 3, "cost": 1800, "premium": True},
+    {"id": "fireplace", "name": "Fireplace", "icon": "fireplace", "category": "luxury", "size": 2, "cost": 900, "premium": True},
+    {"id": "aquarium", "name": "Aquarium", "icon": "aquarium", "category": "luxury", "size": 2, "cost": 1100, "premium": True},
+    {"id": "billiard", "name": "Billiard Table", "icon": "billiard", "category": "luxury", "size": 3, "cost": 1200, "premium": True},
+    {"id": "bar", "name": "Home Bar", "icon": "bar", "category": "luxury", "size": 2, "cost": 1300, "premium": True},
+    {"id": "gym_equipment", "name": "Home Gym", "icon": "gym_equipment", "category": "luxury", "size": 3, "cost": 1700, "premium": True},
+    {"id": "art", "name": "Modern Art", "icon": "art", "category": "luxury", "size": 1, "cost": 800, "premium": True},
+    {"id": "robot", "name": "Robot Butler", "icon": "robot", "category": "luxury", "size": 1, "cost": 3000, "premium": True},
 ]
 
 # ==================== BUILDING (USER-PLACED ITEMS) ====================
@@ -572,319 +662,79 @@ class BuildingItem(BaseModel):
     user_id: str = "guest"
     location_id: str = "my_home"
     catalog_id: str
-    emoji: str
+    icon: str
     name: str
     x: float  # grid x (0-100)
     y: float  # grid y (0-100)
-    placed_at: datetime = Field(default_factory=datetime.utcnow)
+    placed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-DEFAULT_NPCS = [
-    Character(
-        id="npc_sophie", name="Sophie Laurent", age=28, gender="female", occupation="Fashion Designer",
-        bio="A creative fashion designer from Paris.", avatar_emoji="👩‍🎨", location_id="paris_cafe",
-        appearance=CharacterAppearance(skin_color="#F5D0C5", hair_color="#4A3728", height=165),
-        attributes=CharacterAttributes(intelligence=70, strength=30, charisma=75, beauty=80, creativity=90, luck=50),
-        personality=CharacterPersonality(extroversion=75, kindness=70, humor=60, ambition=80),
-        objectives=["become_famous", "find_love"], hobbies=["art", "photography", "socializing"],
-        position_x=30, position_y=40, is_npc=True
-    ),
-    Character(
-        id="npc_kenji", name="Kenji Tanaka", age=32, gender="male", occupation="Software Engineer",
-        bio="A tech genius from Tokyo.", avatar_emoji="👨‍💻", location_id="tokyo_apartment",
-        appearance=CharacterAppearance(skin_color="#E8C4A0", hair_color="#1A1A1A", height=175),
-        attributes=CharacterAttributes(intelligence=95, strength=40, charisma=40, beauty=50, creativity=70, luck=60),
-        personality=CharacterPersonality(extroversion=35, kindness=60, humor=40, ambition=85),
-        objectives=["become_rich", "master_career"], hobbies=["coding", "gaming", "reading"],
-        position_x=60, position_y=50, is_npc=True
-    ),
-    Character(
-        id="npc_marcus", name="Marcus Johnson", age=35, gender="male", occupation="Marketing Director",
-        bio="A charismatic businessman from New York.", avatar_emoji="👨‍💼", location_id="nyc_office",
-        appearance=CharacterAppearance(skin_color="#8D5524", hair_color="#1A1A1A", height=185),
-        attributes=CharacterAttributes(intelligence=75, strength=55, charisma=90, beauty=65, creativity=55, luck=70),
-        personality=CharacterPersonality(extroversion=90, kindness=75, humor=85, ambition=95),
-        objectives=["become_rich", "have_family", "become_famous"], hobbies=["sports", "socializing", "music"],
-        position_x=70, position_y=30, is_npc=True
-    )
-]
-
-# ==================== FREE AI DECISION ENGINE ====================
-
-def get_free_ai_decision(character_dict: dict, location: dict, other_characters: list) -> dict:
-    """FREE AI - No LLM API calls needed! Uses smart rules."""
-    
-    needs = character_dict.get("needs", {})
-    personality = character_dict.get("personality", {})
-    attributes = character_dict.get("attributes", {})
-    hobbies = character_dict.get("hobbies", [])
-    available_actions = location.get("available_actions", ["idle"])
-    
-    # Priority needs
-    urgent_needs = []
-    if needs.get("bladder", 100) < 30:
-        urgent_needs.append(("bladder", ["use_toilet", "toilet"]))
-    if needs.get("hunger", 100) < 30:
-        urgent_needs.append(("hunger", ["eat", "cook", "dinner", "croissant", "lunch"]))
-    if needs.get("energy", 100) < 25:
-        urgent_needs.append(("energy", ["sleep", "rest", "relax", "nap"]))
-    if needs.get("hygiene", 100) < 25:
-        urgent_needs.append(("hygiene", ["shower", "swim"]))
-    
-    action = None
-    
-    # Handle urgent needs first
-    for need_name, keywords in urgent_needs:
-        for action_name in available_actions:
-            if any(kw in action_name.lower() for kw in keywords):
-                action = action_name
-                break
-        if action:
-            break
-    
-    # If no urgent need, choose based on personality, attributes and hobbies
-    if not action:
-        weighted_actions = []
-        
-        # Social personality prefers social activities
-        if personality.get("extroversion", 50) > 60:
-            social_keywords = ["chat", "meet", "social", "dance", "network", "flirt", "party", "friends"]
-            for a in available_actions:
-                if any(kw in a.lower() for kw in social_keywords):
-                    weighted_actions.extend([a] * 3)
-        
-        # High charisma = better at social stuff
-        if attributes.get("charisma", 50) > 70:
-            for a in available_actions:
-                if any(kw in a.lower() for kw in ["flirt", "network", "socialize"]):
-                    weighted_actions.extend([a] * 2)
-        
-        # High intelligence prefers learning
-        if attributes.get("intelligence", 50) > 70:
-            for a in available_actions:
-                if any(kw in a.lower() for kw in ["read", "study", "work", "brainstorm"]):
-                    weighted_actions.extend([a] * 2)
-        
-        # High strength prefers physical
-        if attributes.get("strength", 50) > 60:
-            for a in available_actions:
-                if any(kw in a.lower() for kw in ["exercise", "lift", "jog", "swim", "sports", "boxing"]):
-                    weighted_actions.extend([a] * 2)
-        
-        # Match hobbies to actions
-        hobby_keywords = {
-            "reading": ["read", "book"],
-            "gaming": ["game", "play"],
-            "cooking": ["cook", "meal"],
-            "sports": ["jog", "swim", "volleyball", "sports", "exercise"],
-            "music": ["music", "dance"],
-            "art": ["art", "creative"],
-            "dancing": ["dance"],
-            "photography": ["photo"],
-            "yoga": ["yoga", "meditate"],
-            "swimming": ["swim"],
-            "socializing": ["chat", "meet", "friends", "social"],
-        }
-        
-        for hobby in hobbies:
-            keywords = hobby_keywords.get(hobby, [])
-            for a in available_actions:
-                if any(kw in a.lower() for kw in keywords):
-                    weighted_actions.extend([a] * 3)
-        
-        # Check moderate needs
-        if needs.get("fun", 100) < 50:
-            for a in available_actions:
-                if any(kw in a.lower() for kw in ["dance", "music", "tv", "game", "swim", "surf", "party"]):
-                    weighted_actions.append(a)
-        
-        if needs.get("social", 100) < 50:
-            for a in available_actions:
-                if any(kw in a.lower() for kw in ["chat", "meet", "friend", "date", "flirt"]):
-                    weighted_actions.append(a)
-        
-        # Add all available with lower weight
-        weighted_actions.extend(available_actions)
-        action = random.choice(weighted_actions) if weighted_actions else "idle"
-    
-    # Generate thought
-    thoughts_map = {
-        "eat": ["I'm getting hungry...", "Time for food!", "Yummy!"],
-        "sleep": ["So tired...", "Need rest.", "Zzz..."],
-        "work": ["Let's be productive!", "Focus time!", "Work hard!"],
-        "chat": ["Who's around?", "Let's talk!", "I need company."],
-        "dance": ["Feel the beat!", "Let's dance!", "Party time!"],
-        "exercise": ["Gotta stay fit!", "Workout time!", "Feel the burn!"],
-        "coffee": ["Need caffeine!", "Coffee time!", "Ah, coffee..."],
-        "shower": ["Time to freshen up!", "Clean time!", "A shower sounds nice."],
-        "read": ["Learning time!", "What's new?", "Books are life."],
-        "flirt": ["Someone cute here?", "Feeling romantic...", "Let's mingle!"],
-        "swim": ["Water feels great!", "Splash!", "Swimming is fun!"],
-        "study": ["Time to learn!", "Education matters!", "Study hard!"],
-        "game": ["Gaming time!", "Let's play!", "Level up!"],
-    }
-    
-    thought = "Hmm, what should I do..."
-    for key, templates in thoughts_map.items():
-        if key in action.lower():
-            thought = random.choice(templates)
-            break
-    
-    # Mood based on needs
-    avg_needs = sum([needs.get(k, 100) for k in ["hunger", "energy", "social", "fun", "comfort"]]) / 5
-    if avg_needs > 70:
-        mood = random.choice(["Happy", "Excited", "Content"])
-    elif avg_needs > 40:
-        mood = random.choice(["Focused", "Content", "Social"])
-    else:
-        mood = random.choice(["Tired", "Anxious", "Bored", "Sad"])
-    
-    # Movement
-    current_x = character_dict.get("position_x", 50)
-    current_y = character_dict.get("position_y", 50)
-    
-    # Move towards a random spot, but influenced by personality
-    if personality.get("extroversion", 50) > 60:
-        # Extroverts move more towards center (where people are)
-        target_x = random.uniform(30, 70)
-        target_y = random.uniform(30, 70)
-    else:
-        # Introverts might stay more to the sides
-        target_x = random.uniform(10, 90)
-        target_y = random.uniform(10, 80)
-    
-    # Should change location?
-    should_move = False
-    target_location = None
-    
-    if needs.get("energy", 100) < 20 and "sleep" not in str(available_actions):
-        should_move = True
-        target_location = "tokyo_apartment"
-    elif needs.get("hunger", 100) < 20 and not any("eat" in a for a in available_actions):
-        should_move = True
-        target_location = random.choice(["rome_restaurant", "paris_cafe"])
-    elif needs.get("fun", 100) < 20:
-        should_move = True
-        target_location = random.choice(["berlin_club", "sydney_beach", "london_park"])
-    elif needs.get("social", 100) < 30 and personality.get("extroversion", 50) > 60:
-        should_move = True
-        target_location = random.choice(["paris_cafe", "berlin_club", "rome_restaurant"])
-    
-    return {
-        "action": action,
-        "thought": thought,
-        "mood": mood,
-        "need_changes": {},
-        "should_move": should_move,
-        "target_location": target_location,
-        "target_x": target_x,
-        "target_y": target_y
-    }
-
-# ==================== GAME LOGIC ====================
-
-async def apply_time_decay(character_dict: dict) -> dict:
-    needs = character_dict.get("needs", {})
-    needs["hunger"] = max(0, min(100, needs.get("hunger", 100) - 2.0))
-    needs["energy"] = max(0, min(100, needs.get("energy", 100) - 1.5))
-    needs["social"] = max(0, min(100, needs.get("social", 100) - 1.0))
-    needs["hygiene"] = max(0, min(100, needs.get("hygiene", 100) - 0.5))
-    needs["fun"] = max(0, min(100, needs.get("fun", 100) - 1.5))
-    needs["bladder"] = max(0, min(100, needs.get("bladder", 100) - 3.0))
-    needs["comfort"] = max(0, min(100, needs.get("comfort", 100) - 0.5))
-    character_dict["needs"] = needs
-    return character_dict
-
-def apply_action_effects(character_dict: dict, action: str) -> dict:
-    effects = {
-        "sleep": {"energy": 40, "comfort": 20},
-        "eat": {"hunger": 30, "fun": 5},
-        "croissant": {"hunger": 25, "fun": 10},
-        "dinner": {"hunger": 40, "social": 10},
-        "cook": {"hunger": 35, "fun": 10},
-        "coffee": {"energy": 15, "bladder": -10},
-        "work": {"energy": -15, "hunger": -10},
-        "chat": {"social": 25, "fun": 10},
-        "meet": {"social": 30, "fun": 15},
-        "flirt": {"social": 20, "fun": 25},
-        "shower": {"hygiene": 50, "comfort": 20},
-        "toilet": {"bladder": 60, "comfort": 10},
-        "exercise": {"energy": -20, "fun": 10, "hygiene": -15},
-        "jog": {"energy": -25, "fun": 15, "hygiene": -20},
-        "lift": {"energy": -20, "fun": 10},
-        "dance": {"fun": 35, "social": 20, "energy": -20},
-        "swim": {"fun": 25, "hygiene": 10, "energy": -15},
-        "surf": {"fun": 30, "energy": -25},
-        "yoga": {"energy": 10, "comfort": 25, "fun": 15},
-        "tv": {"fun": 20, "energy": 5},
-        "relax": {"energy": 15, "comfort": 25, "fun": 10},
-        "read": {"fun": 15, "energy": 5},
-        "study": {"energy": -10, "fun": -5},
-        "game": {"fun": 30, "energy": -5},
-        "music": {"fun": 25, "comfort": 15},
-        "party": {"fun": 35, "social": 30, "energy": -25},
-        "date": {"social": 40, "fun": 35},
-        "picnic": {"hunger": 20, "social": 15, "fun": 20},
-        "sunbathe": {"fun": 20, "comfort": 15},
-    }
-    
-    needs = character_dict.get("needs", {})
-    action_lower = action.lower()
-    
-    for key, changes in effects.items():
-        if key in action_lower:
-            for need, change in changes.items():
-                if need in needs:
-                    needs[need] = max(0, min(100, needs.get(need, 100) + change))
-            break
-    
-    character_dict["needs"] = needs
-    return character_dict
-
-def move_character_towards_target(character_dict: dict) -> dict:
-    """Move character towards target position"""
-    current_x = character_dict.get("position_x", 50)
-    current_y = character_dict.get("position_y", 50)
-    target_x = character_dict.get("target_x", 50)
-    target_y = character_dict.get("target_y", 50)
-    speed = character_dict.get("move_speed", 3.0)
-    
-    dx = target_x - current_x
-    dy = target_y - current_y
-    dist = (dx**2 + dy**2)**0.5
-    
-    if dist > 2:
-        # Move towards target
-        character_dict["position_x"] = current_x + (dx / dist) * min(speed, dist)
-        character_dict["position_y"] = current_y + (dy / dist) * min(speed, dist)
-        character_dict["is_moving"] = True
-    else:
-        # Arrived at target, pick new random target
-        character_dict["is_moving"] = False
-        character_dict["target_x"] = random.uniform(10, 90)
-        character_dict["target_y"] = random.uniform(10, 80)
-    
-    return character_dict
 
 # ==================== AUTH ====================
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    """bcrypt when available, otherwise PBKDF2-SHA256 from the standard library."""
+    if HAS_BCRYPT:
+        return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    salt = secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 120_000)
+    return f"pbkdf2${salt}${digest.hex()}"
+
 
 def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    if not hashed:
+        return False
+    if hashed.startswith("pbkdf2$"):
+        _, salt, expected = hashed.split("$", 2)
+        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), 120_000)
+        return hmac.compare_digest(digest.hex(), expected)
+    if HAS_BCRYPT:
+        try:
+            return bcrypt.checkpw(password.encode(), hashed.encode())
+        except ValueError:
+            return False
+    return False
+
+
+def _b64(data: bytes) -> str:
+    return urlsafe_b64encode(data).decode().rstrip("=")
+
+
+def _unb64(data: str) -> bytes:
+    padding = "=" * (-len(data) % 4)
+    return urlsafe_b64decode(data + padding)
+
 
 def create_token(user_id: str, email: str) -> str:
     payload = {
         "user_id": user_id,
         "email": email,
-        "exp": datetime.now(timezone.utc) + timedelta(days=7)
+        "exp": int((datetime.now(timezone.utc) + timedelta(days=7)).timestamp()),
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    if HAS_PYJWT:
+        return jwt.encode(payload, JWT_SECRET, algorithm="HS256")
+    header = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode())
+    signature = _b64(
+        hmac.new(JWT_SECRET.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest()
+    )
+    return f"{header}.{body}.{signature}"
+
 
 def decode_token(token: str) -> Optional[dict]:
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
-    except:
+        if HAS_PYJWT:
+            return jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        header, body, signature = token.split(".")
+        expected = _b64(
+            hmac.new(JWT_SECRET.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest()
+        )
+        if not hmac.compare_digest(expected, signature):
+            return None
+        payload = json.loads(_unb64(body))
+        if int(payload.get("exp", 0)) < int(datetime.now(timezone.utc).timestamp()):
+            return None
+        return payload
+    except Exception:
         return None
 
 async def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
@@ -975,22 +825,46 @@ async def update_language(lang: str, user: dict = Depends(get_current_user)):
 # World
 @api_router.get("/world")
 async def get_world_state():
+    """World summary. Backed by the real iteration state, not a decorative stub."""
+    state = await load_game_state()
     world = await db.world_state.find_one()
     if not world:
         world = WorldState().model_dump()
-        await db.world_state.insert_one(world)
-        world = await db.world_state.find_one()
+        world["id"] = "main"
+        await db.world_state.update_one({"id": "main"}, {"$set": world}, upsert=True)
+        world = await db.world_state.find_one({"id": "main"})
+    world = dict(world or {})
     world["online_users"] = await db.users.count_documents({})
+    world["game_time"] = state.get("updated_at") or world.get("game_time")
+    world["cycle"] = state.get("cycle", 1)
+    world["max_cycles"] = state.get("max_cycles", arcadia_engine.MAX_CYCLES)
+    world["chapter"] = state.get("chapter", 1)
+    world["stability"] = state.get("stability", 100.0)
+    world["lucidity"] = round(arcadia_engine.global_lucidity(state), 2)
+    world["flux"] = state.get("flux", 0.0)
+    world["is_paused"] = bool(state.get("paused", False))
+    world["current_weather"] = state.get("weather", "clear")
+    world["ending"] = state.get("ending")
     return serialize_doc(world)
 
+
 @api_router.post("/world/pause")
-async def toggle_pause():
-    world = await db.world_state.find_one()
-    if world:
-        new_paused = not world.get("is_paused", False)
-        await db.world_state.update_one({}, {"$set": {"is_paused": new_paused}})
-        return {"is_paused": new_paused}
-    return {"is_paused": False}
+async def toggle_pause(payload: Optional[dict] = Body(default=None)):
+    """Pause/resume the live iteration.
+
+    The flag lives on the game state itself, so the legacy world document and the
+    game API can never disagree about whether the world is moving.
+    """
+    state = await load_game_state()
+    current = bool(state.get("paused", False))
+    requested = (payload or {}).get("paused")
+    new_paused = (not current) if requested is None else bool(requested)
+    state["paused"] = new_paused
+    await save_game_state(state)
+    await db.world_state.update_one(
+        {"id": "main"}, {"$set": {"id": "main", "is_paused": new_paused}}, upsert=True
+    )
+    return {"is_paused": new_paused, "paused": new_paused}
 
 # Locations
 @api_router.get("/locations")
@@ -1007,160 +881,198 @@ async def get_location(location_id: str):
     location = await db.locations.find_one({"id": location_id})
     return serialize_doc(location) if location else {"error": "Not found"}
 
-# Characters
+# Characters: projections of the live iteration, so the roster can never drift
+# out of sync with what the simulation is actually doing.
+def _average(first: dict, second: dict, key: str) -> float:
+    """Average one attribute across two parents (used for inherited stats)."""
+    a = float((first.get("attributes") or {}).get(key, 50.0))
+    b = float((second.get("attributes") or {}).get(key, 50.0))
+    return round((a + b) / 2.0, 2)
+
+
+def clamp01(value: float) -> float:
+    return max(0.0, min(100.0, float(value)))
+
+
+async def load_game_state() -> dict:
+    state = await db.game_state.find_one({"id": "main"})
+    if state:
+        state.pop("_id", None)
+        return state
+    locations = await db.locations.find().to_list(100)
+    state = arcadia_engine.new_state(locations)
+    await db.game_state.update_one({"id": "main"}, {"$set": state}, upsert=True)
+    return state
+
+
+async def save_game_state(state: dict) -> None:
+    state["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.game_state.update_one({"id": "main"}, {"$set": state}, upsert=True)
+
+
 @api_router.get("/characters")
 async def get_characters():
-    characters = await db.characters.find().to_list(100)
-    if not characters:
-        for char in DEFAULT_NPCS:
-            await db.characters.insert_one(char.model_dump())
-        characters = [char.model_dump() for char in DEFAULT_NPCS]
-    return serialize_doc(characters)
+    state = await load_game_state()
+    return arcadia_legacy.project_characters(state)
 
 @api_router.get("/characters/{character_id}")
 async def get_character(character_id: str):
-    character = await db.characters.find_one({"id": character_id})
-    return serialize_doc(character) if character else {"error": "Not found"}
+    state = await load_game_state()
+    for resident in state.get("residents", []):
+        if resident.get("id") == character_id:
+            return arcadia_legacy.project_character(resident, state)
+    raise HTTPException(status_code=404, detail="Character not found")
 
 @api_router.post("/characters/create")
 async def create_character(data: CharacterCreate, user: dict = Depends(get_current_user)):
-    # Allow guest creation (no auth required) so the sandbox is immediately playable.
-    # If logged in, character is attached to the user.
+    """Create a playable character that joins the live iteration.
+
+    Guests are allowed so the sandbox is immediately playable; logged-in users
+    get the character attached to their account.
+    """
     user_id = user["id"] if user else f"guest_{uuid.uuid4().hex[:8]}"
-    
-    # Avatar based on age/gender
-    if data.age < 3:
-        avatar = "👶"
-    elif data.age < 13:
-        avatar = "👧" if data.gender == "female" else "👦"
-    elif data.age < 60:
-        avatar = "👩" if data.gender == "female" else ("👨" if data.gender == "male" else "🧑")
-    else:
-        avatar = "👵" if data.gender == "female" else "👴"
-    
-    character = Character(
-        user_id=user_id,
-        name=data.name,
-        age=data.age,
-        gender=data.gender,
-        occupation=data.occupation,
-        education=data.education,
-        bio=data.bio,
-        avatar_emoji=avatar,
-        appearance=CharacterAppearance(
-            skin_color=data.skin_color,
-            hair_color=data.hair_color,
-            eye_color=data.eye_color,
-            height=data.height,
-            body_type=data.body_type
+    state = await load_game_state()
+
+    payload = data.model_dump()
+    payload["location_id"] = "my_home" if user else "paris_cafe"
+    resident = arcadia_engine.make_custom_resident(payload, user_id=user_id)
+    state.setdefault("residents", []).append(resident)
+
+    entry = {
+        "id": f"chr_new_{uuid.uuid4().hex[:6]}",
+        "cycle": state.get("cycle", 1),
+        "kind": "newcomer",
+        "icon": "newcomer",
+        "text": arcadia_content.t(
+            f"Une nouvelle vie s'installe à ARCADIA-9 : {resident['name']}.",
+            f"A new life moves into ARCADIA-9: {resident['name']}.",
         ),
-        attributes=CharacterAttributes(
-            intelligence=data.intelligence,
-            strength=data.strength,
-            charisma=data.charisma,
-            beauty=data.beauty,
-            creativity=data.creativity,
-            luck=data.luck
-        ),
-        personality=CharacterPersonality(
-            extroversion=data.extroversion,
-            kindness=data.kindness,
-            humor=data.humor,
-            ambition=data.ambition
-        ),
-        objectives=data.objectives,
-        hobbies=data.hobbies,
-        is_npc=False,
-        location_id="my_home" if user else "paris_cafe",
-        position_x=random.uniform(30, 70),
-        position_y=random.uniform(30, 70)
-    )
-    
-    await db.characters.insert_one(character.model_dump())
+        "residents": [resident["id"]],
+        "resident_name": resident["name"],
+        "location_id": resident["location_id"],
+    }
+    state["chronicle"] = (state.get("chronicle") or []) + [entry]
+    await save_game_state(state)
+
     if user:
-        await db.users.update_one({"id": user["id"]}, {"$push": {"characters": character.id}})
-    
-    return serialize_doc(character.model_dump())
+        await db.users.update_one(
+            {"id": user["id"]}, {"$push": {"characters": resident["id"]}}
+        )
+
+    return arcadia_legacy.project_character(resident, state)
+
 
 @api_router.delete("/characters/{character_id}")
 async def delete_character(character_id: str, user: dict = Depends(get_current_user)):
-    if not user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    character = await db.characters.find_one({"id": character_id})
-    if not character or character.get("user_id") != user["id"]:
+    state = await load_game_state()
+    resident = next(
+        (r for r in state.get("residents", []) if r.get("id") == character_id), None
+    )
+    if not resident:
+        raise HTTPException(status_code=404, detail="Character not found")
+    if not user or (resident.get("is_npc", True) and resident.get("user_id") != user["id"]):
         raise HTTPException(status_code=403, detail="Cannot delete")
-    await db.characters.delete_one({"id": character_id})
+    state["residents"] = [r for r in state["residents"] if r.get("id") != character_id]
+    state["relationships"] = {
+        key: value
+        for key, value in (state.get("relationships") or {}).items()
+        if character_id not in key.split("|")
+    }
+    await save_game_state(state)
     return {"message": "Deleted"}
+
 
 @api_router.post("/characters/{character_id}/move")
 async def move_character(character_id: str, location_id: str):
-    location = await db.locations.find_one({"id": location_id})
-    if not location:
-        return {"error": "Location not found"}
-    
-    new_x = random.uniform(20, 80)
-    new_y = random.uniform(20, 70)
-    
-    await db.characters.update_one(
-        {"id": character_id},
-        {"$set": {
-            "location_id": location_id,
-            "current_action": f"Arrived at {location['name']}",
-            "position_x": new_x,
-            "position_y": new_y,
-            "target_x": new_x,
-            "target_y": new_y,
-            "is_moving": False
-        }}
+    state = await load_game_state()
+    location = next(
+        (loc for loc in await db.locations.find().to_list(200) if loc.get("id") == location_id),
+        None,
     )
+    if not location:
+        raise HTTPException(status_code=404, detail="Location not found")
+    resident = next(
+        (r for r in state.get("residents", []) if r.get("id") == character_id), None
+    )
+    if not resident:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    resident["location_id"] = location_id
+    resident["position"] = {
+        "x": round(random.uniform(0.15, 0.85), 3),
+        "y": round(random.uniform(0.25, 0.85), 3),
+    }
+    resident["current_action"] = {
+        "id": "idle",
+        "raw": "arrived",
+        "label": arcadia_content.t(
+            f"Arrivé·e à {location['name']}", f"Arrived at {location['name']}"
+        ),
+        "icon": "location",
+    }
+    await save_game_state(state)
     return {"status": "success", "location": location_id}
+
 
 @api_router.post("/characters/{character_id}/walk")
 async def walk_character(character_id: str, target_x: float, target_y: float):
-    await db.characters.update_one(
-        {"id": character_id},
-        {"$set": {"target_x": max(5, min(95, target_x)), "target_y": max(5, min(85, target_y)), "is_moving": True}}
+    state = await load_game_state()
+    resident = next(
+        (r for r in state.get("residents", []) if r.get("id") == character_id), None
     )
+    if not resident:
+        raise HTTPException(status_code=404, detail="Character not found")
+    position = resident.get("position") or {"x": 0.5, "y": 0.5}
+    position["x"] = round(max(0.05, min(0.95, target_x / 100.0)), 3)
+    position["y"] = round(max(0.05, min(0.95, target_y / 100.0)), 3)
+    resident["position"] = position
+    await save_game_state(state)
     return {"status": "success"}
+
 
 @api_router.post("/characters/{character_id}/have-baby")
 async def have_baby(character_id: str, partner_id: str, baby_name: str, baby_gender: str = "male", user: dict = Depends(get_current_user)):
-    # Allow guest mode (no auth) for MVP
+    """Two residents become parents; the child is a real resident of the world."""
     user_id = user["id"] if user else f"guest_{uuid.uuid4().hex[:8]}"
-    parent1 = await db.characters.find_one({"id": character_id})
-    parent2 = await db.characters.find_one({"id": partner_id})
+    state = await load_game_state()
+    residents = state.get("residents", [])
+    parent1 = next((r for r in residents if r.get("id") == character_id), None)
+    parent2 = next((r for r in residents if r.get("id") == partner_id), None)
     if not parent1 or not parent2:
         raise HTTPException(status_code=404, detail="Character not found")
-    
-    baby = Character(
+    if parent1["id"] == parent2["id"]:
+        raise HTTPException(status_code=400, detail="Two different parents are required")
+
+    first_look = parent1.get("look") or {}
+    second_look = parent2.get("look") or {}
+    baby = arcadia_engine.make_custom_resident(
+        {
+            "name": baby_name,
+            "age": 0,
+            "gender": baby_gender,
+            "occupation": "child",
+            "bio": f"Child of {parent1['name']} and {parent2['name']}",
+            "skin_color": random.choice([first_look.get("skin"), second_look.get("skin")]),
+            "hair_color": random.choice([first_look.get("hair"), second_look.get("hair")]),
+            "height": 50,
+            "location_id": parent1.get("location_id") or "my_home",
+            "intelligence": _average(parent1, parent2, "intelligence"),
+            "strength": _average(parent1, parent2, "strength"),
+            "charisma": _average(parent1, parent2, "charisma"),
+            "beauty": clamp01(_average(parent1, parent2, "beauty") + random.uniform(-10, 10)),
+            "objectives": ["have_family", "stay_healthy"],
+            "hobbies": [],
+        },
         user_id=user_id,
-        name=baby_name,
-        age=0,
-        gender=baby_gender,
-        occupation="child",
-        bio=f"Child of {parent1['name']} and {parent2['name']}",
-        avatar_emoji="👶",
-        appearance=CharacterAppearance(
-            skin_color=random.choice([parent1["appearance"]["skin_color"], parent2["appearance"]["skin_color"]]),
-            hair_color=random.choice([parent1["appearance"]["hair_color"], parent2["appearance"]["hair_color"]]),
-            height=50
-        ),
-        attributes=CharacterAttributes(
-            intelligence=(parent1.get("attributes", {}).get("intelligence", 50) + parent2.get("attributes", {}).get("intelligence", 50)) / 2,
-            strength=(parent1.get("attributes", {}).get("strength", 50) + parent2.get("attributes", {}).get("strength", 50)) / 2,
-            charisma=(parent1.get("attributes", {}).get("charisma", 50) + parent2.get("attributes", {}).get("charisma", 50)) / 2,
-            beauty=(parent1.get("attributes", {}).get("beauty", 50) + parent2.get("attributes", {}).get("beauty", 50)) / 2 + random.uniform(-10, 10),
-        ),
-        family=[character_id, partner_id],
-        location_id=parent1["location_id"],
-        is_npc=False
     )
-    
-    await db.characters.insert_one(baby.model_dump())
-    await db.characters.update_one({"id": character_id}, {"$push": {"children": baby.id}})
-    await db.characters.update_one({"id": partner_id}, {"$push": {"children": baby.id}})
-    
-    return serialize_doc(baby.model_dump())
+    baby["family"] = [character_id, partner_id]
+    baby["partner_id"] = None
+    baby["avatar_icon"] = "avatar-baby"
+    residents.append(baby)
+    parent1.setdefault("children", []).append(baby["id"])
+    parent2.setdefault("children", []).append(baby["id"])
+    await save_game_state(state)
+    return arcadia_legacy.project_character(baby, state)
 
 # Chat
 @api_router.get("/chat")
@@ -1176,107 +1088,60 @@ async def send_chat(content: str, user: dict = Depends(get_current_user)):
     await db.chat_messages.insert_one(message.model_dump())
     return serialize_doc(message.model_dump())
 
-# Logs
+# Logs: the chronicle of the iteration, in the historical response shape.
 @api_router.get("/logs")
 async def get_logs(limit: int = 50):
-    logs = await db.action_logs.find().sort("timestamp", -1).limit(limit).to_list(limit)
-    return serialize_doc(logs)
+    limit = max(1, min(200, int(limit)))
+    state = await load_game_state()
+    return arcadia_legacy.project_logs(state, limit=limit)
 
 # Simulation - FREE AI
 @api_router.post("/simulate")
 async def simulate_tick():
-    world = await db.world_state.find_one()
-    if world and world.get("is_paused", False):
-        return {"status": "paused"}
-    
-    characters = await db.characters.find().to_list(100)
-    locations = await db.locations.find().to_list(100)
-    location_map = {loc["id"]: loc for loc in locations}
-    
-    results = []
-    
-    for char_data in characters:
-        location = location_map.get(char_data.get("location_id"))
-        if not location:
-            continue
-        
-        # Apply time decay
-        char_data = await apply_time_decay(char_data)
-        
-        # Move character towards target
-        char_data = move_character_towards_target(char_data)
-        
-        # Get FREE AI decision
-        decision = get_free_ai_decision(char_data, location, characters)
-        
-        # Apply action effects
-        char_data = apply_action_effects(char_data, decision.get("action", ""))
-        
-        # Update state
-        char_data["current_action"] = decision.get("action", "Idle")
-        char_data["mood"] = decision.get("mood", char_data.get("mood", "Happy"))
-        char_data["target_x"] = decision.get("target_x", char_data.get("target_x", 50))
-        char_data["target_y"] = decision.get("target_y", char_data.get("target_y", 50))
-        
-        thought = decision.get("thought", "")
-        if thought:
-            thoughts = char_data.get("thoughts", [])
-            thoughts.append(thought)
-            char_data["thoughts"] = thoughts[-10:]
-        
-        # Handle location change
-        if decision.get("should_move") and decision.get("target_location"):
-            target_loc = decision.get("target_location")
-            if target_loc in location_map:
-                char_data["location_id"] = target_loc
-                char_data["current_action"] = f"Going to {location_map[target_loc]['name']}"
-                char_data["position_x"] = random.uniform(20, 80)
-                char_data["position_y"] = random.uniform(20, 70)
-        
-        # Save
-        await db.characters.update_one({"id": char_data["id"]}, {"$set": char_data})
-        
-        # Log
-        await db.action_logs.insert_one({
-            "id": str(uuid.uuid4()),
-            "character_id": char_data["id"],
-            "character_name": char_data["name"],
-            "action": char_data["current_action"],
-            "location": location["name"],
-            "thought": thought,
-            "timestamp": datetime.utcnow()
-        })
-        
-        results.append({
-            "character_id": char_data["id"],
-            "name": char_data["name"],
-            "action": char_data["current_action"],
-            "thought": thought,
-            "mood": char_data["mood"],
-            "location": char_data["location_id"],
-            "position_x": char_data.get("position_x"),
-            "position_y": char_data.get("position_y"),
-            "is_moving": char_data.get("is_moving")
-        })
-    
-    return {"status": "success", "results": results}
+    """Advance the world one cycle.
+
+    Historically this endpoint had its own bespoke logic. It now drives the same
+    engine as ``POST /api/game/cycle`` so the two can never disagree, and the
+    response keeps its original shape for existing clients.
+    """
+    state = await load_game_state()
+    if state.get("paused"):
+        return {"status": "paused", "message": "Iteration en pause."}
+
+    locations = await db.locations.find().to_list(200)
+    try:
+        state, report = arcadia_engine.advance_cycle(state, locations)
+    except arcadia_engine.GameRuleError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    await save_game_state(state)
+    return {
+        "status": "success",
+        "results": arcadia_legacy.report_to_legacy_results(report),
+        "cycle": report.get("cycle"),
+        "world": report.get("world"),
+    }
+
 
 # Reset
 @api_router.post("/reset")
 async def reset_game():
-    await db.characters.delete_many({})
+    """Start a brand-new iteration, keeping the location catalogue intact."""
     await db.locations.delete_many({})
+    await db.chat_messages.delete_many({})
     await db.action_logs.delete_many({})
     await db.world_state.delete_many({})
-    await db.chat_messages.delete_many({})
-    
+
     for loc in DEFAULT_LOCATIONS:
         await db.locations.insert_one(loc.model_dump())
-    for char in DEFAULT_NPCS:
-        await db.characters.insert_one(char.model_dump())
-    
-    await db.world_state.insert_one(WorldState().model_dump())
-    return {"status": "success", "message": "Game reset!"}
+
+    locations = [loc.model_dump() for loc in DEFAULT_LOCATIONS]
+    state = arcadia_engine.new_state(locations)
+    await db.game_state.delete_many({})
+    await db.game_state.update_one({"id": "main"}, {"$set": state}, upsert=True)
+    await db.world_state.update_one(
+        {"id": "main"}, {"$set": {"id": "main", "is_paused": False}}, upsert=True
+    )
+    return {"status": "success", "message": "Game reset!", "cycle": state["cycle"]}
 
 # ==================== STRIPE PAYMENT ROUTES ====================
 
@@ -1461,7 +1326,7 @@ async def place_building_item(payload: Dict, user: dict = Depends(get_current_us
         user_id=user_id,
         location_id=location_id,
         catalog_id=catalog_id,
-        emoji=catalog_item["emoji"],
+        icon=catalog_item["icon"],
         name=catalog_item["name"],
         x=max(5, min(95, x)),
         y=max(5, min(95, y)),
@@ -1500,23 +1365,38 @@ async def mock_subscribe(user: dict = Depends(get_current_user)):
     return {"status": "success", "message": "Premium activated for 30 days (mock)"}
 
 app.include_router(api_router)
-app.add_middleware(CORSMiddleware, allow_credentials=True, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(arcadia_api.create_game_router(db, lambda: DEFAULT_LOCATIONS))
+app.include_router(arcadia_api.create_support_router())
+# CORS: the browser build of the client is served from a different origin
+# (Expo web on :8081) than the API (:8000). Authentication uses a Bearer token,
+# not cookies, so credentials can stay off -- which also keeps `Allow-Origin: *`
+# spec-legal and prevents the browser from rejecting the response.
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=False,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.on_event("startup")
-async def startup_seed_locations():
-    """Upsert all DEFAULT_LOCATIONS so existing databases pick up new countries."""
+
+async def _seed_locations():
+    """Upsert all DEFAULT_LOCATIONS so existing saves pick up new countries."""
     try:
-        for loc in DEFAULT_LOCATIONS:
-            await db.locations.update_one(
-                {"id": loc.id},
-                {"$set": loc.model_dump()},
-                upsert=True,
-            )
+        with_batch = db.batch() if isinstance(db, arcadia_store.JsonStore) else None
+        if with_batch is None:
+            for loc in DEFAULT_LOCATIONS:
+                await db.locations.update_one(
+                    {"id": loc.id}, {"$set": loc.model_dump()}, upsert=True
+                )
+        else:
+            # One atomic write for the whole seed instead of one per location.
+            async with with_batch:
+                for loc in DEFAULT_LOCATIONS:
+                    await db.locations.update_one(
+                        {"id": loc.id}, {"$set": loc.model_dump()}, upsert=True
+                    )
         count = await db.locations.count_documents({})
-        logger.info(f"[startup] Locations seeded/upserted. Total: {count}")
+        logger.info("[startup] Locations seeded/upserted. Total: %s", count)
     except Exception as e:
-        logger.error(f"[startup] Failed to seed locations: {e}")
-
-@app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+        logger.error("[startup] Failed to seed locations: %s", e)

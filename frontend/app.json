@@ -1,23 +1,20 @@
 {
   "expo": {
-    "name": "Life",
-    "slug": "life-simulator",
-    "version": "2.0.0",
+    "name": "ARCADIA-9",
+    "slug": "arcadia-9",
+    "version": "2.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "life",
-    "userInterfaceStyle": "automatic",
+    "scheme": "arcadia9",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true,
-      "infoPlist": {
-        "NSCameraUsageDescription": "Take photos for your character profile"
-      }
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#0f0c29"
+        "backgroundColor": "#0B0D10"
       },
       "edgeToEdgeEnabled": true,
       "permissions": []
@@ -33,12 +30,11 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-image.png",
-          "imageWidth": 200,
+          "imageWidth": 180,
           "resizeMode": "contain",
-          "backgroundColor": "#0f0c29"
+          "backgroundColor": "#0B0D10"
         }
-      ],
-      "expo-web-browser"
+      ]
     ],
     "experiments": {
       "typedRoutes": true

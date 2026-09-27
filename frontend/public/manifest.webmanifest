@@ -1,0 +1,14 @@
+{
+  "name": "ARCADIA-9",
+  "short_name": "ARCADIA-9",
+  "description": "Simulateur de vies : 18 cycles, six habitants, une seule regle, chaque geste laisse une trace.",
+  "lang": "fr",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0D10",
+  "theme_color": "#0B0D10",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -3,13 +3,17 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "preinstall": "./scripts/cmd-guard.js --preinstall",
+    "preinstall": "node ./scripts/cmd-guard.js --preinstall",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "guard": "node ./scripts/design-guard.mjs",
+    "icons": "node ./scripts/make-icons.mjs",
+    "verify": "npm run typecheck && npm run guard && npm run lint"
   },
   "dependencies": {
     "@expo/metro-runtime": "6.1.2",
