@@ -840,7 +840,7 @@ export function Stage({
    * One scale for the whole cast, and the furniture keeps it too: a resident
    * and the counter beside them have to agree about how big the room is.
    */
-  const spriteScale = Math.max(0.72, Math.min(1.24, size.width / 560));
+  const spriteScale = Math.max(0.62, Math.min(1.55, size.width / 740));
 
   return (
     <View
