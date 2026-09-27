@@ -120,7 +120,7 @@ async def lifespan(_: FastAPI):
 
 # Create the main app
 app = FastAPI(
-    title=arcadia_content.BRAND["name"] + " — simulateur de vies",
+    title=arcadia_content.BRAND["name"] + " : simulateur de vies",
     lifespan=lifespan,
 )
 api_router = APIRouter(prefix="/api")
@@ -317,7 +317,7 @@ class Character(BaseModel):
     occupation: str = "unemployed"
     education: str = "none"
     bio: str = ""
-    avatar_emoji: str = "😊"
+    avatar_icon: str = "avatar-neutral"
     appearance: CharacterAppearance = Field(default_factory=CharacterAppearance)
     attributes: CharacterAttributes = Field(default_factory=CharacterAttributes)
     personality: CharacterPersonality = Field(default_factory=CharacterPersonality)
@@ -379,7 +379,7 @@ class Location(BaseModel):
     type: str
     city: str
     country: str
-    emoji: str
+    icon: str
     available_actions: List[str] = Field(default_factory=list)
     objects: List[str] = Field(default_factory=list)
     is_premium: bool = False
@@ -437,190 +437,190 @@ HOBBIES_LIST = [
 DEFAULT_LOCATIONS = [
     Location(
         id="paris_cafe", name="Le Petit Parisien", description="A cozy Parisian cafe",
-        type="cafe", city="Paris", country="France", emoji="☕",
+        type="cafe", city="Paris", country="France", icon="cafe",
         available_actions=["drink_coffee", "eat_croissant", "read_newspaper", "chat_with_others", "work_on_laptop", "people_watch", "flirt"],
         objects=["espresso_machine", "pastry_display", "chairs", "newspapers"]
     ),
     Location(
         id="tokyo_apartment", name="Shibuya Apartment", description="A modern Tokyo apartment",
-        type="apartment", city="Tokyo", country="Japan", emoji="🏠",
+        type="apartment", city="Tokyo", country="Japan", icon="apartment",
         available_actions=["sleep", "cook_meal", "watch_tv", "take_shower", "use_toilet", "relax", "exercise", "study", "play_games"],
         objects=["futon", "kitchen", "tv", "bathroom", "gaming_console"]
     ),
     Location(
         id="nyc_office", name="Manhattan Tech Hub", description="A modern office building",
-        type="office", city="New York", country="USA", emoji="💼",
+        type="office", city="New York", country="USA", icon="office",
         available_actions=["work", "attend_meeting", "coffee_break", "network", "brainstorm", "lunch"],
         objects=["desks", "meeting_rooms", "coffee_machine"]
     ),
     Location(
         id="london_park", name="Hyde Park", description="A beautiful green park",
-        type="park", city="London", country="UK", emoji="🌳",
+        type="park", city="London", country="UK", icon="park",
         available_actions=["jog", "walk", "have_picnic", "feed_ducks", "read_book", "meet_friends", "yoga", "play_frisbee"],
         objects=["benches", "lake", "pathways", "gardens"]
     ),
     Location(
         id="barcelona_gym", name="FitLife Barcelona", description="A modern fitness center",
-        type="gym", city="Barcelona", country="Spain", emoji="💪",
+        type="gym", city="Barcelona", country="Spain", icon="gym",
         available_actions=["lift_weights", "cardio", "swim", "yoga_class", "sauna", "boxing"],
         objects=["weights", "treadmills", "pool", "sauna"]
     ),
     Location(
         id="rome_restaurant", name="Trattoria Da Nonna", description="An Italian restaurant",
-        type="restaurant", city="Rome", country="Italy", emoji="🍝",
+        type="restaurant", city="Rome", country="Italy", icon="restaurant",
         available_actions=["eat_dinner", "drink_wine", "romantic_date", "celebrate", "socialize"],
         objects=["tables", "wine_cellar", "kitchen"]
     ),
     Location(
         id="berlin_club", name="Berghain Underground", description="A legendary techno club",
-        type="club", city="Berlin", country="Germany", emoji="🎵",
+        type="club", city="Berlin", country="Germany", icon="club",
         available_actions=["dance", "drink", "meet_people", "enjoy_music", "flirt", "party"],
         objects=["dance_floor", "bars", "dj_booth"],
         is_premium=True
     ),
     Location(
         id="sydney_beach", name="Bondi Beach", description="The iconic Australian beach",
-        type="beach", city="Sydney", country="Australia", emoji="🏖️",
+        type="beach", city="Sydney", country="Australia", icon="beach",
         available_actions=["swim", "surf", "sunbathe", "volleyball", "build_sandcastle", "relax"],
         objects=["beach", "surf_boards", "umbrellas"]
     ),
     Location(
         id="school", name="International School", description="A school for learning",
-        type="school", city="Various", country="International", emoji="🏫",
+        type="school", city="Various", country="International", icon="school",
         available_actions=["study", "attend_class", "homework", "make_friends", "sports", "lunch"],
         objects=["classrooms", "library", "cafeteria"]
     ),
     Location(
         id="hospital", name="City Hospital", description="A medical center",
-        type="hospital", city="Various", country="International", emoji="🏥",
+        type="hospital", city="Various", country="International", icon="hospital",
         available_actions=["checkup", "visit_patient", "have_baby", "rest"],
         objects=["rooms", "pharmacy", "maternity_ward"]
     ),
     # ---- New countries / iconic landmarks (20+ countries world map) ----
     Location(
         id="dubai_mall", name="Dubai Mall", description="The world's largest shopping mall",
-        type="market", city="Dubai", country="UAE", emoji="🏬",
+        type="market", city="Dubai", country="UAE", icon="market",
         available_actions=["shopping", "watch_fountain", "luxury_dining", "skating", "people_watch"],
         objects=["boutiques", "aquarium", "fountain", "food_court"], is_premium=True
     ),
     Location(
         id="rio_beach", name="Copacabana Beach", description="Iconic Brazilian beach",
-        type="beach", city="Rio de Janeiro", country="Brazil", emoji="🏝️",
+        type="beach", city="Rio de Janeiro", country="Brazil", icon="beach",
         available_actions=["sunbathe", "samba_dance", "volleyball", "drink_caipirinha", "surf"],
         objects=["sand", "kiosks", "umbrellas"]
     ),
     Location(
         id="mumbai_market", name="Crawford Market", description="A bustling Indian bazaar",
-        type="market", city="Mumbai", country="India", emoji="🧺",
+        type="market", city="Mumbai", country="India", icon="market",
         available_actions=["bargain", "buy_spices", "eat_street_food", "chai_break", "people_watch"],
         objects=["stalls", "spices", "fabrics", "street_food"]
     ),
     Location(
         id="cairo_museum", name="Egyptian Museum", description="Home to ancient pharaohs",
-        type="museum", city="Cairo", country="Egypt", emoji="🏛️",
+        type="museum", city="Cairo", country="Egypt", icon="museum",
         available_actions=["admire_art", "study_history", "guided_tour", "photograph", "meditate"],
         objects=["mummies", "sarcophagi", "papyrus", "artifacts"]
     ),
     Location(
         id="seoul_cinema", name="CGV Yongsan", description="A massive Korean cinema complex",
-        type="cinema", city="Seoul", country="South Korea", emoji="🎬",
+        type="cinema", city="Seoul", country="South Korea", icon="cinema",
         available_actions=["watch_movie", "eat_popcorn", "first_date", "discuss_film", "vr_experience"],
         objects=["screens", "snack_bar", "vr_room"]
     ),
     Location(
         id="kyoto_temple", name="Kinkaku-ji", description="The Golden Pavilion",
-        type="temple", city="Kyoto", country="Japan", emoji="⛩️",
+        type="temple", city="Kyoto", country="Japan", icon="temple",
         available_actions=["meditate", "pray", "tea_ceremony", "garden_walk", "photograph"],
         objects=["pagoda", "koi_pond", "bonsai", "incense"]
     ),
     Location(
         id="himalaya_mountain", name="Everest Base Camp", description="The roof of the world",
-        type="mountain", city="Khumbu", country="Nepal", emoji="🏔️",
+        type="mountain", city="Khumbu", country="Nepal", icon="mountain",
         available_actions=["hike", "climb", "stargaze", "meditate", "yak_ride"],
         objects=["tents", "prayer_flags", "yaks", "summit"], is_premium=True
     ),
     Location(
         id="amsterdam_park", name="Vondelpark", description="The lungs of Amsterdam",
-        type="park", city="Amsterdam", country="Netherlands", emoji="🌷",
+        type="park", city="Amsterdam", country="Netherlands", icon="park",
         available_actions=["cycle", "picnic", "feed_swans", "rollerblade", "open_air_concert"],
         objects=["canals", "tulips", "bikes", "windmill"]
     ),
     Location(
         id="bangkok_market", name="Chatuchak Market", description="Asia's largest weekend market",
-        type="market", city="Bangkok", country="Thailand", emoji="🍜",
+        type="market", city="Bangkok", country="Thailand", icon="market",
         available_actions=["eat_pad_thai", "haggle", "buy_silk", "drink_coconut", "explore"],
         objects=["stalls", "street_food", "souvenirs"]
     ),
     Location(
         id="mexico_cathedral", name="Metropolitan Cathedral", description="Heart of Mexico City",
-        type="temple", city="Mexico City", country="Mexico", emoji="⛪",
+        type="temple", city="Mexico City", country="Mexico", icon="temple",
         available_actions=["pray", "light_candle", "tour_architecture", "reflect", "confession"],
         objects=["altars", "frescoes", "bells"]
     ),
     Location(
         id="capetown_safari", name="Table Mountain", description="A South African natural wonder",
-        type="mountain", city="Cape Town", country="South Africa", emoji="🦁",
+        type="mountain", city="Cape Town", country="South Africa", icon="mountain",
         available_actions=["hike", "cable_car", "spot_wildlife", "photograph", "picnic"],
         objects=["cable_car", "rocks", "viewpoint"]
     ),
     Location(
         id="istanbul_bazaar", name="Grand Bazaar", description="A historic Turkish bazaar",
-        type="market", city="Istanbul", country="Turkey", emoji="🕌",
+        type="market", city="Istanbul", country="Turkey", icon="market",
         available_actions=["drink_tea", "buy_rugs", "haggle", "smoke_hookah", "eat_baklava"],
         objects=["lamps", "carpets", "spices", "tea"]
     ),
     Location(
         id="toronto_office", name="CN Tower Offices", description="A skyscraper office in Canada",
-        type="office", city="Toronto", country="Canada", emoji="🏙️",
+        type="office", city="Toronto", country="Canada", icon="office",
         available_actions=["work", "skyline_view", "coffee_break", "elevator_ride", "network"],
         objects=["desks", "glass_floor", "telescope"]
     ),
     Location(
         id="buenos_aires_club", name="Tango Milonga", description="A passionate tango club",
-        type="club", city="Buenos Aires", country="Argentina", emoji="💃",
+        type="club", city="Buenos Aires", country="Argentina", icon="club",
         available_actions=["dance_tango", "drink_malbec", "flirt", "live_music", "romance"],
         objects=["dance_floor", "stage", "bar"]
     ),
     Location(
         id="stockholm_park", name="Djurgården", description="A royal island of nature",
-        type="park", city="Stockholm", country="Sweden", emoji="❄️",
+        type="park", city="Stockholm", country="Sweden", icon="park",
         available_actions=["walk", "ski", "fika_break", "ice_skate", "spot_moose"],
         objects=["forest", "lake", "deer"]
     ),
     Location(
         id="lisbon_cafe", name="A Brasileira", description="A historic Portuguese cafe",
-        type="cafe", city="Lisbon", country="Portugal", emoji="🍷",
+        type="cafe", city="Lisbon", country="Portugal", icon="cafe",
         available_actions=["drink_espresso", "eat_pastel_de_nata", "read_poetry", "people_watch", "chat"],
         objects=["pastries", "tiles", "patio"]
     ),
     Location(
         id="alps_mountain", name="Matterhorn", description="The iconic Swiss Alps",
-        type="mountain", city="Zermatt", country="Switzerland", emoji="⛰️",
+        type="mountain", city="Zermatt", country="Switzerland", icon="mountain",
         available_actions=["ski", "snowboard", "hike", "fondue_dinner", "stargaze"],
         objects=["snow", "chalets", "cable_car"]
     ),
     Location(
         id="athens_temple", name="Parthenon", description="An ancient Greek wonder",
-        type="temple", city="Athens", country="Greece", emoji="🏛️",
+        type="temple", city="Athens", country="Greece", icon="temple",
         available_actions=["admire_history", "philosophize", "photograph", "study", "reflect"],
         objects=["columns", "ruins", "view"]
     ),
     Location(
         id="bali_beach", name="Kuta Beach", description="A tropical Indonesian paradise",
-        type="beach", city="Bali", country="Indonesia", emoji="🌴",
+        type="beach", city="Bali", country="Indonesia", icon="beach",
         available_actions=["surf", "yoga_sunset", "drink_coconut", "scuba_dive", "spa"],
         objects=["waves", "palms", "loungers"]
     ),
     Location(
         id="moscow_museum", name="Bolshoi Theatre", description="A legendary Russian theatre",
-        type="museum", city="Moscow", country="Russia", emoji="🎭",
+        type="museum", city="Moscow", country="Russia", icon="museum",
         available_actions=["watch_ballet", "opera", "applaud", "champagne_intermission", "admire_art"],
         objects=["stage", "balconies", "chandeliers"], is_premium=True
     ),
     # User-owned buildable location
     Location(
         id="my_home", name="My Home", description="Your personal home you can fully customize",
-        type="apartment", city="Anywhere", country="Yours", emoji="🏡",
+        type="apartment", city="Anywhere", country="Yours", icon="apartment",
         available_actions=["sleep", "cook_meal", "watch_tv", "take_shower", "use_toilet", "relax", "exercise", "play_games", "read", "host_party"],
         objects=["sofa", "bed", "kitchen", "tv", "garden"]
     ),
@@ -629,31 +629,31 @@ DEFAULT_LOCATIONS = [
 # ==================== BUILDABLE OBJECTS CATALOG ====================
 BUILD_CATALOG = [
     # Free items
-    {"id": "sofa", "name": "Sofa", "emoji": "🛋️", "category": "furniture", "size": 2, "cost": 100, "premium": False},
-    {"id": "bed", "name": "Bed", "emoji": "🛏️", "category": "furniture", "size": 2, "cost": 150, "premium": False},
-    {"id": "chair", "name": "Chair", "emoji": "🪑", "category": "furniture", "size": 1, "cost": 30, "premium": False},
-    {"id": "table", "name": "Table", "emoji": "🪟", "category": "furniture", "size": 2, "cost": 80, "premium": False},
-    {"id": "lamp", "name": "Lamp", "emoji": "💡", "category": "decor", "size": 1, "cost": 25, "premium": False},
-    {"id": "plant", "name": "Plant", "emoji": "🪴", "category": "decor", "size": 1, "cost": 20, "premium": False},
-    {"id": "tv", "name": "TV", "emoji": "📺", "category": "electronics", "size": 2, "cost": 250, "premium": False},
-    {"id": "kitchen", "name": "Kitchen", "emoji": "🍳", "category": "appliance", "size": 3, "cost": 500, "premium": False},
-    {"id": "bathroom", "name": "Bathroom", "emoji": "🚽", "category": "appliance", "size": 2, "cost": 350, "premium": False},
-    {"id": "bookshelf", "name": "Bookshelf", "emoji": "📚", "category": "furniture", "size": 1, "cost": 90, "premium": False},
-    {"id": "tree", "name": "Tree", "emoji": "🌳", "category": "outdoor", "size": 2, "cost": 50, "premium": False},
-    {"id": "flowers", "name": "Flowers", "emoji": "🌷", "category": "outdoor", "size": 1, "cost": 15, "premium": False},
-    {"id": "fence", "name": "Fence", "emoji": "🚧", "category": "outdoor", "size": 1, "cost": 40, "premium": False},
-    {"id": "rug", "name": "Rug", "emoji": "🟫", "category": "decor", "size": 2, "cost": 60, "premium": False},
-    # Premium items 👑
-    {"id": "pool", "name": "Swimming Pool", "emoji": "🏊", "category": "luxury", "size": 4, "cost": 2500, "premium": True},
-    {"id": "jacuzzi", "name": "Jacuzzi", "emoji": "🛁", "category": "luxury", "size": 2, "cost": 1500, "premium": True},
-    {"id": "piano", "name": "Grand Piano", "emoji": "🎹", "category": "luxury", "size": 3, "cost": 1800, "premium": True},
-    {"id": "fireplace", "name": "Fireplace", "emoji": "🔥", "category": "luxury", "size": 2, "cost": 900, "premium": True},
-    {"id": "aquarium", "name": "Aquarium", "emoji": "🐠", "category": "luxury", "size": 2, "cost": 1100, "premium": True},
-    {"id": "billiard", "name": "Billiard Table", "emoji": "🎱", "category": "luxury", "size": 3, "cost": 1200, "premium": True},
-    {"id": "bar", "name": "Home Bar", "emoji": "🍸", "category": "luxury", "size": 2, "cost": 1300, "premium": True},
-    {"id": "gym_equipment", "name": "Home Gym", "emoji": "🏋️", "category": "luxury", "size": 3, "cost": 1700, "premium": True},
-    {"id": "art", "name": "Modern Art", "emoji": "🖼️", "category": "luxury", "size": 1, "cost": 800, "premium": True},
-    {"id": "robot", "name": "Robot Butler", "emoji": "🤖", "category": "luxury", "size": 1, "cost": 3000, "premium": True},
+    {"id": "sofa", "name": "Sofa", "icon": "sofa", "category": "furniture", "size": 2, "cost": 100, "premium": False},
+    {"id": "bed", "name": "Bed", "icon": "bed", "category": "furniture", "size": 2, "cost": 150, "premium": False},
+    {"id": "chair", "name": "Chair", "icon": "chair", "category": "furniture", "size": 1, "cost": 30, "premium": False},
+    {"id": "table", "name": "Table", "icon": "table", "category": "furniture", "size": 2, "cost": 80, "premium": False},
+    {"id": "lamp", "name": "Lamp", "icon": "lamp", "category": "decor", "size": 1, "cost": 25, "premium": False},
+    {"id": "plant", "name": "Plant", "icon": "plant", "category": "decor", "size": 1, "cost": 20, "premium": False},
+    {"id": "tv", "name": "TV", "icon": "tv", "category": "electronics", "size": 2, "cost": 250, "premium": False},
+    {"id": "kitchen", "name": "Kitchen", "icon": "kitchen", "category": "appliance", "size": 3, "cost": 500, "premium": False},
+    {"id": "bathroom", "name": "Bathroom", "icon": "bathroom", "category": "appliance", "size": 2, "cost": 350, "premium": False},
+    {"id": "bookshelf", "name": "Bookshelf", "icon": "bookshelf", "category": "furniture", "size": 1, "cost": 90, "premium": False},
+    {"id": "tree", "name": "Tree", "icon": "tree", "category": "outdoor", "size": 2, "cost": 50, "premium": False},
+    {"id": "flowers", "name": "Flowers", "icon": "flowers", "category": "outdoor", "size": 1, "cost": 15, "premium": False},
+    {"id": "fence", "name": "Fence", "icon": "fence", "category": "outdoor", "size": 1, "cost": 40, "premium": False},
+    {"id": "rug", "name": "Rug", "icon": "rug", "category": "decor", "size": 2, "cost": 60, "premium": False},
+    # Paid add-ons for the legacy catalogue.
+    {"id": "pool", "name": "Swimming Pool", "icon": "pool", "category": "luxury", "size": 4, "cost": 2500, "premium": True},
+    {"id": "jacuzzi", "name": "Jacuzzi", "icon": "jacuzzi", "category": "luxury", "size": 2, "cost": 1500, "premium": True},
+    {"id": "piano", "name": "Grand Piano", "icon": "piano", "category": "luxury", "size": 3, "cost": 1800, "premium": True},
+    {"id": "fireplace", "name": "Fireplace", "icon": "fireplace", "category": "luxury", "size": 2, "cost": 900, "premium": True},
+    {"id": "aquarium", "name": "Aquarium", "icon": "aquarium", "category": "luxury", "size": 2, "cost": 1100, "premium": True},
+    {"id": "billiard", "name": "Billiard Table", "icon": "billiard", "category": "luxury", "size": 3, "cost": 1200, "premium": True},
+    {"id": "bar", "name": "Home Bar", "icon": "bar", "category": "luxury", "size": 2, "cost": 1300, "premium": True},
+    {"id": "gym_equipment", "name": "Home Gym", "icon": "gym_equipment", "category": "luxury", "size": 3, "cost": 1700, "premium": True},
+    {"id": "art", "name": "Modern Art", "icon": "art", "category": "luxury", "size": 1, "cost": 800, "premium": True},
+    {"id": "robot", "name": "Robot Butler", "icon": "robot", "category": "luxury", "size": 1, "cost": 3000, "premium": True},
 ]
 
 # ==================== BUILDING (USER-PLACED ITEMS) ====================
@@ -662,7 +662,7 @@ class BuildingItem(BaseModel):
     user_id: str = "guest"
     location_id: str = "my_home"
     catalog_id: str
-    emoji: str
+    icon: str
     name: str
     x: float  # grid x (0-100)
     y: float  # grid y (0-100)
@@ -942,7 +942,7 @@ async def create_character(data: CharacterCreate, user: dict = Depends(get_curre
         "id": f"chr_new_{uuid.uuid4().hex[:6]}",
         "cycle": state.get("cycle", 1),
         "kind": "newcomer",
-        "icon": "🌱",
+        "icon": "newcomer",
         "text": arcadia_content.t(
             f"Une nouvelle vie s'installe à ARCADIA-9 : {resident['name']}.",
             f"A new life moves into ARCADIA-9: {resident['name']}.",
@@ -1008,7 +1008,7 @@ async def move_character(character_id: str, location_id: str):
         "label": arcadia_content.t(
             f"Arrivé·e à {location['name']}", f"Arrived at {location['name']}"
         ),
-        "icon": "📍",
+        "icon": "location",
     }
     await save_game_state(state)
     return {"status": "success", "location": location_id}
@@ -1067,7 +1067,7 @@ async def have_baby(character_id: str, partner_id: str, baby_name: str, baby_gen
     )
     baby["family"] = [character_id, partner_id]
     baby["partner_id"] = None
-    baby["avatar_emoji"] = "👶"
+    baby["avatar_icon"] = "avatar-baby"
     residents.append(baby)
     parent1.setdefault("children", []).append(baby["id"])
     parent2.setdefault("children", []).append(baby["id"])
@@ -1326,7 +1326,7 @@ async def place_building_item(payload: Dict, user: dict = Depends(get_current_us
         user_id=user_id,
         location_id=location_id,
         catalog_id=catalog_id,
-        emoji=catalog_item["emoji"],
+        icon=catalog_item["icon"],
         name=catalog_item["name"],
         x=max(5, min(95, x)),
         y=max(5, min(95, y)),

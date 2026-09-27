@@ -21,7 +21,7 @@ def _require_live_server(live_api_url):
     return live_api_url
 
 
-REQUIRED_CATALOG_FIELDS = {"id", "name", "emoji", "category", "size", "cost", "premium"}
+REQUIRED_CATALOG_FIELDS = {"id", "name", "icon", "category", "size", "cost", "premium"}
 
 
 # ==================== Locations: 31 incl. my_home ====================
@@ -43,7 +43,7 @@ class TestLocationsWithMyHome:
         assert r.status_code == 200
         body = r.json()
         assert body.get("id") == "my_home"
-        assert body.get("name") and body.get("emoji")
+        assert body.get("name") and body.get("icon") == body.get("type")
 
 
 # ==================== Build catalog ====================
@@ -99,7 +99,7 @@ class TestBuildLifecycleGuest:
         item = r.json()
         assert item.get("id"), f"placed item missing id: {item}"
         assert item.get("catalog_id") == "sofa"
-        assert item.get("emoji") == "🛋️"
+        assert item.get("icon") == "sofa"
         assert item.get("name") == "Sofa"
         assert item.get("location_id") == "my_home"
         assert item.get("user_id") == "guest"
@@ -203,9 +203,9 @@ class TestGuestCharacterCreation:
         assert ch.get("age") == 25
         assert ch.get("gender") == "female"
         assert ch.get("is_npc") is False
-        # 13 <= age < 60 + female → 👩
-        assert ch.get("avatar_emoji") == "👩", f"Unexpected avatar: {ch.get('avatar_emoji')}"
-        # No auth → location should be paris_cafe per server.py L1074
+        # 13 <= age < 60 with a female gender gives the avatar-woman key
+        assert ch.get("avatar_icon") == "avatar-woman", f"Unexpected avatar: {ch.get('avatar_icon')}"
+        # No auth means the guest lands in the Paris cafe, per server.py L1074
         assert ch.get("location_id") == "paris_cafe", (
             f"Expected location_id=paris_cafe for guest, got {ch.get('location_id')}"
         )

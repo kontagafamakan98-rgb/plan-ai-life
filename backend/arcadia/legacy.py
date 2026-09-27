@@ -79,7 +79,7 @@ def project_character(
         "occupation": _english(resident.get("occupation"), "unemployed"),
         "education": resident.get("education", "none"),
         "bio": _english(resident.get("bio")),
-        "avatar_emoji": resident.get("avatar_emoji") or "😊",
+        "avatar_icon": resident.get("avatar_icon") or "avatar-neutral",
         "appearance": {
             "skin_color": look.get("skin") or "#F5D0C5",
             "hair_color": look.get("hair") or "#4A3728",
@@ -145,9 +145,9 @@ def project_log(entry: Dict[str, Any], index: int = 0) -> Dict[str, Any]:
         "character_name": entry.get("resident_name")
         or " ".join(
             (entry.get("text") or {}).get("en", "").split(" ")[:2]
-        ).strip("— "),
+        ).strip("- "),
         "action": _english(entry.get("text")),
-        "location": entry.get("location_id") or "—",
+        "location": entry.get("location_id") or "",
         "thought": _english(entry.get("text")),
         "kind": entry.get("kind"),
         "icon": entry.get("icon"),

@@ -35,7 +35,9 @@ SUPPORT_OFFERS: List[Dict[str, Any]] = [
             "Trois jeux de couleurs alternatifs pour les habitants et les décors.",
             "Three alternative colour sets for residents and scenery.",
         ),
-        "price_display": "3,99 €",
+        # No price is announced anywhere: nothing here is on sale yet, and an
+        # invented amount would be a promise the build cannot keep.
+        "availability": "not_for_sale",
         "one_time": True,
         "grants": C.t(
             "Uniquement de l'apparence.",
@@ -57,7 +59,7 @@ SUPPORT_OFFERS: List[Dict[str, Any]] = [
             "Extended codex texts: the previous Watcher's notes and one extra "
             "ending, purely narrative.",
         ),
-        "price_display": "4,99 €",
+        "availability": "not_for_sale",
         "one_time": True,
         "grants": C.t(
             "Lecture seule : du texte, une fin en plus.",
@@ -79,7 +81,7 @@ SUPPORT_OFFERS: List[Dict[str, Any]] = [
             "A one-off tip. It unlocks nothing: that is written here so you don't "
             "find out afterwards.",
         ),
-        "price_display": "libre",
+        "availability": "not_for_sale",
         "one_time": True,
         "grants": C.t("Rien d'autre que notre reconnaissance.", "Nothing but our thanks."),
         "never_grants": C.t(
@@ -93,12 +95,13 @@ SUPPORT_OFFERS: List[Dict[str, Any]] = [
 MONETIZATION_PRINCIPLES = C.t(
     "Règles que ce jeu s'impose : aucun paiement pour progresser, aucune monnaie "
     "premium, aucune boîte surprise, aucune limite d'énergie artificielle, aucun "
-    "compte à rebours, aucune publicité. Les offres ci-dessus sont esthétiques ou "
-    "documentaires, et les achats sont désactivés dans cette version.",
+    "compte à rebours, aucune publicité. Les offres listées ici sont esthétiques "
+    "ou documentaires, aucun prix n'est affiché et rien n'est en vente dans cette "
+    "version.",
     "Rules this game imposes on itself: no paying to progress, no premium "
     "currency, no loot boxes, no artificial energy limits, no countdowns, no ads. "
-    "The offers above are cosmetic or documentary, and purchasing is disabled in "
-    "this build.",
+    "The offers listed here are cosmetic or documentary, no price is displayed "
+    "and nothing is on sale in this build.",
 )
 
 
@@ -183,7 +186,7 @@ def create_game_router(db, locations_provider: Callable[[], List[Dict[str, Any]]
 
     @router.get("/identity")
     async def get_identity():
-        """Brand, goals, interventions and endings — one call for the codex."""
+        """Brand, goals, interventions and endings, in one call for the codex."""
         return {
             "brand": C.BRAND,
             "goals": [

@@ -47,63 +47,63 @@ LUCIDITY_DRIFT = 1.15
 LUCIDITY_NOTICE = 1.6  # extra suspicion when life goes suspiciously well
 
 MOODS: Dict[str, Dict[str, Any]] = {
-    "radiant": {"label": C.t("Rayonnant", "Radiant"), "color": "#FFD166", "icon": "🌟"},
-    "content": {"label": C.t("Serein", "Content"), "color": "#7BD389", "icon": "🙂"},
-    "focused": {"label": C.t("Concentré", "Focused"), "color": "#5AB0F0", "icon": "🎯"},
-    "neutral": {"label": C.t("Neutre", "Neutral"), "color": "#B6BEC9", "icon": "😐"},
-    "tired": {"label": C.t("Fatigué", "Tired"), "color": "#9C8FD1", "icon": "🥱"},
-    "anxious": {"label": C.t("Tendu", "Anxious"), "color": "#F09A5A", "icon": "😬"},
-    "upset": {"label": C.t("À vif", "Upset"), "color": "#EF6A6A", "icon": "😖"},
-    "lost": {"label": C.t("Perdu", "Lost"), "color": "#7E8AA2", "icon": "🌫️"},
+    "radiant": {"label": C.t("Rayonnant", "Radiant"), "color": "#FFD166", "icon": "radiant"},
+    "content": {"label": C.t("Serein", "Content"), "color": "#7BD389", "icon": "content"},
+    "focused": {"label": C.t("Concentré", "Focused"), "color": "#5AB0F0", "icon": "focused"},
+    "neutral": {"label": C.t("Neutre", "Neutral"), "color": "#B6BEC9", "icon": "neutral"},
+    "tired": {"label": C.t("Fatigué", "Tired"), "color": "#8A93A6", "icon": "tired"},
+    "anxious": {"label": C.t("Tendu", "Anxious"), "color": "#F09A5A", "icon": "anxious"},
+    "upset": {"label": C.t("À vif", "Upset"), "color": "#EF6A6A", "icon": "upset"},
+    "lost": {"label": C.t("Perdu", "Lost"), "color": "#7E8AA2", "icon": "lost"},
 }
 
 WEATHER = [
-    {"id": "clear", "label": C.t("Ciel net", "Clear sky"), "icon": "☀️", "stability": 0.6},
-    {"id": "veiled", "label": C.t("Ciel voilé", "Veiled sky"), "icon": "🌤️", "stability": 0.0},
-    {"id": "rain", "label": C.t("Pluie fine", "Fine rain"), "icon": "🌧️", "stability": -0.4},
-    {"id": "static", "label": C.t("Air chargé", "Charged air"), "icon": "🌫️", "stability": -0.9},
+    {"id": "clear", "label": C.t("Ciel net", "Clear sky"), "icon": "clear", "stability": 0.6},
+    {"id": "veiled", "label": C.t("Ciel voilé", "Veiled sky"), "icon": "veiled", "stability": 0.0},
+    {"id": "rain", "label": C.t("Pluie fine", "Fine rain"), "icon": "rain", "stability": -0.4},
+    {"id": "static", "label": C.t("Air chargé", "Charged air"), "icon": "static", "stability": -0.9},
 ]
 
 SIGNATURES: Dict[str, Dict[str, Any]] = {
     "first_step": {
         "label": C.t("Premier pas", "First step"),
         "hint": C.t("Un objectif de vie mené à son terme.", "One life goal carried to the end."),
-        "icon": "🏁",
+        "icon": "first_step",
     },
     "three_lives": {
         "label": C.t("Trois vies", "Three lives"),
         "hint": C.t("Trois objectifs accomplis.", "Three goals accomplished."),
-        "icon": "🏅",
+        "icon": "three_lives",
     },
     "six_lives": {
         "label": C.t("Les six", "All six"),
         "hint": C.t("Six objectifs accomplis.", "Six goals accomplished."),
-        "icon": "🏆",
+        "icon": "six_lives",
     },
     "hands_off": {
         "label": C.t("Mains propres", "Clean hands"),
         "hint": C.t("Six cycles d'affilée sans intervention.", "Six cycles in a row without intervening."),
-        "icon": "🤲",
+        "icon": "hands_off",
     },
     "low_profile": {
         "label": C.t("Profil bas", "Low profile"),
         "hint": C.t("Rester sous 30 de lucidité jusqu'au cycle 12.", "Stay under 30 lucidity until cycle 12."),
-        "icon": "🕶️",
+        "icon": "low_profile",
     },
     "rock_solid": {
         "label": C.t("Béton armé", "Rock solid"),
         "hint": C.t("Atteindre 92 de stabilité ou plus.", "Reach 92 stability or more."),
-        "icon": "🧱",
+        "icon": "rock_solid",
     },
     "witness": {
         "label": C.t("Témoin", "Witness"),
         "hint": C.t("Voir un habitant dépasser 70 de lucidité.", "See a resident pass 70 lucidity."),
-        "icon": "👁️",
+        "icon": "witness",
     },
     "residue": {
         "label": C.t("Le Résidu", "The Residue"),
         "hint": C.t("Rencontrer le fragment de l'itération 8.", "Meet the fragment of iteration 8."),
-        "icon": "🕳️",
+        "icon": "residue",
     },
 }
 
@@ -186,7 +186,7 @@ def _resident_from_content(spec: Dict[str, Any]) -> Dict[str, Any]:
         # created characters still rely on them.
         "user_id": None,
         "education": "none",
-        "avatar_emoji": _avatar_emoji_for(spec["age"], spec["gender"]),
+        "avatar_icon": _avatar_icon_for(spec["age"], spec["gender"]),
         "height": 158 + (spec["age"] % 5) * 4,
         "body_type": "average",
         "action_queue": [],
@@ -198,18 +198,17 @@ def _resident_from_content(spec: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _avatar_emoji_for(age: int, gender: str) -> str:
+def _avatar_icon_for(age: int, gender: str) -> str:
+    """Semantic portrait key; the interface draws the glyph, the API ships none."""
     if age < 3:
-        return "👶"
+        return "avatar-baby"
     if age < 13:
-        return "👧" if gender == "female" else "👦"
+        return "avatar-child"
+    if age < 20:
+        return "avatar-teen"
     if age < 60:
-        if gender == "female":
-            return "👩"
-        if gender == "male":
-            return "👨"
-        return "🧑"
-    return "👵" if gender == "female" else "👴"
+        return "avatar-woman" if gender == "female" else "avatar-man" if gender == "male" else "avatar-adult"
+    return "avatar-elder"
 
 
 def make_custom_resident(data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
@@ -226,7 +225,7 @@ def make_custom_resident(data: Dict[str, Any], user_id: Optional[str] = None) ->
         "gender": gender,
         "occupation": C.t(data.get("occupation") or "unemployed", data.get("occupation") or "unemployed"),
         "home": data.get("location_id") or "my_home",
-        "city": data.get("city") or "—",
+        "city": data.get("city") or "",
         "bio": C.t(data.get("bio") or "", data.get("bio") or ""),
         "quote": C.t("", ""),
         "look": {
@@ -267,7 +266,7 @@ def make_custom_resident(data: Dict[str, Any], user_id: Optional[str] = None) ->
         "refusals": 0,
         "user_id": user_id,
         "education": data.get("education") or "none",
-        "avatar_emoji": _avatar_emoji_for(age, gender),
+        "avatar_icon": _avatar_icon_for(age, gender),
         "height": int(data.get("height", 170)),
         "body_type": data.get("body_type") or "average",
         "action_queue": [],
@@ -373,7 +372,7 @@ def chapter_label(chapter: int) -> Dict[str, str]:
         1: C.t("I. Basse fréquence", "I. Low frequency"),
         2: C.t("II. Bruit de fond", "II. Background noise"),
         3: C.t("III. Signal", "III. Signal"),
-    }.get(chapter, C.t("—", "—"))
+    }.get(chapter, C.t("Sans titre", "Untitled"))
 
 
 def _goal_progress_total(resident: Dict[str, Any]) -> float:
@@ -1025,7 +1024,7 @@ def advance_cycle(
             "id": family["id"],
             "raw": family.get("raw", family["id"]),
             "label": family["label"],
-            "icon": family.get("icon", "🌀"),
+            "icon": family.get("icon", "idle"),
         }
         resident["thought"] = _thought_for(
             resident, family, rng, deliberate=family.get("id") == "idle"
@@ -1063,7 +1062,7 @@ def advance_cycle(
             cycle,
             "action",
             family["label"],
-            family.get("icon", "🌀"),
+            family.get("icon", "idle"),
             family=family["id"],
         )
 
@@ -1107,7 +1106,7 @@ def advance_cycle(
                         cycle,
                         "relation",
                         C.t(second["name"], second["name"]),
-                        "🤝",
+                        "bond",
                         other=second["id"],
                     )
                     _memory_add(
@@ -1115,7 +1114,7 @@ def advance_cycle(
                         cycle,
                         "relation",
                         C.t(first["name"], first["name"]),
-                        "🤝",
+                        "bond",
                         other=first["id"],
                     )
                     highlights.append(
@@ -1152,7 +1151,7 @@ def advance_cycle(
                 }
             )
             chronicle.append(
-                _chronicle_entry(cycle, "milestone", "🪜", highlights[-1]["text"], [resident["id"]])
+                _chronicle_entry(cycle, "milestone", "milestone", highlights[-1]["text"], [resident["id"]])
             )
             # Achievements are noticeable: the resident earns them suspiciously fast.
             resident["lucidity"] = round(clamp(float(resident["lucidity"]) + LUCIDITY_NOTICE), 2)
@@ -1160,24 +1159,24 @@ def advance_cycle(
             state["flux"] = round(float(state.get("flux", 0)) + 4.0, 2)
             state["stability"] = round(clamp(float(state.get("stability", 0)) + 4.0), 2)
             text = C.t(
-                f"Objectif accompli : {resident['name']} — {goal.get('label', {}).get('fr', event['goal_id'])}.",
-                f"Goal accomplished: {resident['name']} — {goal.get('label', {}).get('en', event['goal_id'])}.",
+                f"Objectif accompli : {resident['name']}, {goal.get('label', {}).get('fr', event['goal_id'])}.",
+                f"Goal accomplished: {resident['name']}, {goal.get('label', {}).get('en', event['goal_id'])}.",
             )
             highlights.append(
                 {"kind": "goal_complete", "resident_id": resident["id"], "text": text}
             )
-            chronicle.append(_chronicle_entry(cycle, "goal", "🎉", text, [resident["id"]]))
+            chronicle.append(_chronicle_entry(cycle, "goal", "goal", text, [resident["id"]]))
             resident["lucidity"] = round(clamp(float(resident["lucidity"]) + 4.0), 2)
-            _memory_add(resident, cycle, "goal", text, "🎉")
+            _memory_add(resident, cycle, "goal", text, "goal")
 
     # 5. One chronicle line per resident, explaining the choice.
     for report in resident_reports:
         location = locations_by_id.get(report["location_id"])
         text = C.t(
-            f"{report['name']} — {report['action']['label']['fr']} "
+            f"{report['name']} : {report['action']['label']['fr']} "
             f"({location.get('name', report['location_id']) if location else report['location_id']}) "
             f"{report['reason']['fr']}.",
-            f"{report['name']} — {report['action']['label']['en']} "
+            f"{report['name']}: {report['action']['label']['en']} "
             f"({location.get('name', report['location_id']) if location else report['location_id']}) "
             f"{report['reason']['en']}.",
         )
@@ -1185,7 +1184,7 @@ def advance_cycle(
             _chronicle_entry(
                 cycle,
                 "action",
-                report["action"].get("icon", "🌀"),
+                report["action"].get("icon", "idle"),
                 text,
                 [report["id"]],
                 resident_name=report["name"],
@@ -1198,7 +1197,7 @@ def advance_cycle(
     event = _roll_event(rng, stability_current)
     if event:
         _apply_world_effects(state, residents, event.get("effects") or {})
-        chronicle.append(_chronicle_entry(cycle, "event", "🌐", event["text"], []))
+        chronicle.append(_chronicle_entry(cycle, "event", "world", event["text"], []))
         highlights.append({"kind": "event", "text": event["text"], "id": event["id"]})
 
     # 7. Anomaly.
@@ -1213,7 +1212,7 @@ def advance_cycle(
             "RÉSIDU-08 renders in a corner of the world. It doesn't move. It waits "
             "for you to look at it.",
         )
-        chronicle.append(_chronicle_entry(cycle, "anomaly", "🕳️", text, []))
+        chronicle.append(_chronicle_entry(cycle, "anomaly", "anomaly", text, []))
         highlights.append({"kind": "anomaly", "text": text, "id": "residu"})
         _unlock_signature(state, "residue")
 
@@ -1273,7 +1272,7 @@ def advance_cycle(
     ending = _resolve_ending(state)
     if ending:
         state["ending"] = ending
-        chronicle.append(_chronicle_entry(cycle, "ending", "🌒", C.ENDING_NOTE, []))
+        chronicle.append(_chronicle_entry(cycle, "ending", "ending", C.ENDING_NOTE, []))
 
     report = {
         "status": "ended" if ending else "ok",
@@ -1416,8 +1415,8 @@ def _check_signatures(
         if not info:
             continue
         text = C.t(
-            f"Signature obtenue : {info['label']['fr']} — {info['hint']['fr']}",
-            f"Signature unlocked: {info['label']['en']} — {info['hint']['en']}",
+            f"Signature obtenue : {info['label']['fr']} ({info['hint']['fr']}).",
+            f"Signature unlocked: {info['label']['en']} ({info['hint']['en']}).",
         )
         chronicle.append(_chronicle_entry(cycle, "signature", info["icon"], text, []))
 
@@ -1637,10 +1636,10 @@ def apply_intervention(
     )
 
     text = C.t(
-        f"Intervention — {definition['label']['fr']}"
+        f"Intervention : {definition['label']['fr']}"
         + (f" sur {target['name']}" if target else "")
         + ".",
-        f"Intervention — {definition['label']['en']}"
+        f"Intervention: {definition['label']['en']}"
         + (f" on {target['name']}" if target else "")
         + ".",
     )
@@ -1671,11 +1670,11 @@ def apply_dilemma_choice(
     state["pending_dilemma"] = None
 
     text = C.t(
-        f"Décision — {definition['prompt']['fr']} → {choice['label']['fr']}.",
-        f"Decision — {definition['prompt']['en']} → {choice['label']['en']}.",
+        f"Décision : {definition['prompt']['fr']}, {choice['label']['fr']}.",
+        f"Decision: {definition['prompt']['en']}, {choice['label']['en']}.",
     )
     entry = _chronicle_entry(
-        int(state.get("cycle", 1)), "decision", "⚖️", text, []
+        int(state.get("cycle", 1)), "decision", "decision", text, []
     )
     state["chronicle"] = (state.get("chronicle", []) + [entry])[-160:]
     state["updated_at"] = _now()
@@ -1808,6 +1807,6 @@ def public_interventions(state: Dict[str, Any]) -> List[Dict[str, Any]]:
 def location_action_preview(location: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Which families a location can actually satisfy (used by the client UI)."""
     return [
-        {"id": fam["id"], "label": fam["label"], "icon": fam.get("icon", "🌀"), "tags": fam.get("tags", [])}
+        {"id": fam["id"], "label": fam["label"], "icon": fam.get("icon", "idle"), "tags": fam.get("tags", [])}
         for fam in _location_affordances(location)
     ]

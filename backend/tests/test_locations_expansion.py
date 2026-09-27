@@ -33,7 +33,7 @@ NEW_IDS = {
     "alps_mountain", "athens_temple", "bali_beach", "moscow_museum",
 }
 
-REQUIRED_FIELDS = {"id", "name", "description", "type", "city", "country", "emoji", "available_actions"}
+REQUIRED_FIELDS = {"id", "name", "description", "type", "city", "country", "icon", "available_actions"}
 
 
 # ==================== Basic health ====================
@@ -80,7 +80,8 @@ class TestLocationsExpansion:
             # type checks
             assert isinstance(loc["available_actions"], list)
             assert loc["name"] and loc["description"] and loc["city"] and loc["country"]
-            assert loc["emoji"]
+            # The icon is a semantic key the interface maps to a vector glyph.
+            assert loc["icon"] and loc["icon"].isascii(), loc.get("icon")
 
     def test_country_diversity(self, api_client):
         r = api_client.get(f"{API}/locations")

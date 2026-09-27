@@ -4,7 +4,7 @@ Two families of tests live here:
 
 * **Hermetic tests** use ``local_client``: the real FastAPI app running inside
   the test process against a throw-away JSON save file. They need no server, no
-  database and no network, so they always run — including in CI.
+  database and no network, so they always run, including in CI.
 * **Live tests** (legacy integration suite) use ``api_client``: plain HTTP against
   a running backend. They skip with a clear message when no server answers,
   instead of erroring out at collection time the way they used to.

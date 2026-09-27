@@ -57,7 +57,7 @@ class TestGuestHaveBaby:
         assert baby["name"] == "Aria"
         assert baby["age"] == 0
         assert baby["gender"] == "female"
-        assert baby["avatar_emoji"] == "👶"
+        assert baby["avatar_icon"] == "avatar-baby"
         assert baby["is_npc"] is False
         assert (baby["user_id"] or "").startswith("guest_")
         assert baby["appearance"]["height"] == 50

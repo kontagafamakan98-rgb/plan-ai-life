@@ -7,6 +7,8 @@
 # Dependencies
 node_modules/
 /node_modules
+# Local agent workspace metadata.
+.freebuff/
 /.pnp
 .pnp.js
 .yarn/install-state.gz

@@ -1,4 +1,4 @@
-"""Unit tests for ``arcadia.engine`` — no framework, no database, no network.
+"""Unit tests for ``arcadia.engine``: no framework, no database, no network.
 
 These are the tests that actually protect the game rules: decisions, needs,
 memory, relationships, goal progression, lucidity/stability economy, dilemmas

@@ -413,7 +413,7 @@ class TestLegacyEndpoints:
                 "age",
                 "gender",
                 "occupation",
-                "avatar_emoji",
+                "avatar_icon",
                 "appearance",
                 "attributes",
                 "personality",
@@ -483,7 +483,9 @@ class TestLegacyEndpoints:
         ids = {loc["id"] for loc in locations}
         assert {"paris_cafe", "tokyo_apartment", "my_home"} <= ids
         for loc in locations:
-            assert loc["emoji"] and loc["name"] and loc["type"]
+            # The catalogue ships a semantic icon key, never a picture-glyph.
+            assert loc["icon"] == loc["type"] and loc["name"]
+            assert "emoji" not in loc
 
     def test_location_actions_preview(self, fresh_client):
         body = fresh_client.get(f"{API}/locations/paris_cafe/actions").json()
@@ -505,7 +507,7 @@ class TestLegacyEndpoints:
         char = created.json()
         assert char["name"] == "Iris"
         assert char["is_npc"] is False
-        assert char["avatar_emoji"] == "👩"
+        assert char["avatar_icon"] == "avatar-woman"
         assert char["location_id"] == "paris_cafe"
         assert (char["user_id"] or "").startswith("guest_")
         assert set(char["objectives"]) == {"become_artist", "find_love"}
@@ -541,7 +543,7 @@ class TestLegacyEndpoints:
         baby = response.json()
         assert baby["name"] == "Lou"
         assert baby["age"] == 0
-        assert baby["avatar_emoji"] == "👶"
+        assert baby["avatar_icon"] == "avatar-baby"
         assert baby["is_npc"] is False
         assert {first, second} <= set(baby["family"])
         assert baby["id"] in fresh_client.get(f"{API}/characters/{first}").json()["children"]
