@@ -44,6 +44,37 @@ export const palette = {
   over: '#C8605A',
 }
 
+/**
+ * The world inside the glass.
+ *
+ * The interface around it is cold on purpose (graphite, one cool accent: the
+ * Watcher's instruments). Everything the residents touch is warm instead:
+ * plaster, oak, brass, linen, terracotta, lamplight. These are the only colours
+ * the stage, the scenery and the characters are allowed to draw from.
+ */
+export const world = {
+  // Materials
+  plaster: '#E4D3BC',
+  plasterLow: '#C9B49A',
+  wainscot: '#8C6A4A',
+  oak: '#A8743F',
+  oakDark: '#7A5230',
+  walnut: '#5C3B22',
+  brass: '#C9A24A',
+  brassDark: '#8E6F2C',
+  linen: '#EFE3CF',
+  terracotta: '#B4623C',
+  sage: '#7C8A5A',
+  sageDark: '#55603C',
+  sand: '#D9BF92',
+  // Light and shade inside the frame
+  glow: '#FFC978',
+  glowSoft: '#FFD9A0',
+  shadow: '#2A1408',
+  rim: '#FFE0B0',
+  haze: '#C98B4B',
+};
+
 export const space = {
   xxs: 2,
   xs: 4,
@@ -83,22 +114,11 @@ export const layout = {
   minTouchTarget: 44,
 }
 
+/** Depth, in the one form every platform still reads: a single box shadow. */
 export const elevation = {
-  card: {
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
-  },
-  float: {
-    shadowColor: '#000',
-    shadowOpacity: 0.34,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
-  },
-}
+  card: { boxShadow: '0 4px 10px rgba(0, 0, 0, 0.28)', elevation: 4 },
+  float: { boxShadow: '0 8px 18px rgba(0, 0, 0, 0.4)', elevation: 10 },
+} as const;
 
 /** Colour ramp for a 0..100 meter, tuned so low values read as urgent. */
 export function meterColor(value: number): string {
@@ -125,38 +145,46 @@ export function stabilityColor(value: number): string {
 
 /**
  * Background stops for the sky, chosen from the in-game hour. These are the
- * muted greys, dust blues and dust yellows of a filmed city, never saturated.
+ * tones of a warm evening over a real city: dust at dawn, sun-baked midday,
+ * amber dusk, and a night that glows rather than turns blue.
  */
 export function skyGradient(hour: number): [string, string, ...string[]] {
-  if (hour < 5) return ['#0A0D12', '#111722', '#171E29']
-  if (hour < 8) return ['#26313C', '#4C5866', '#88796B']
-  if (hour < 12) return ['#37536A', '#6C8FA4', '#B4C7D3']
-  if (hour < 16) return ['#3C5F76', '#7A9EB2', '#C2D5DF']
-  if (hour < 19) return ['#2A3E52', '#6B7078', '#A98461']
-  if (hour < 22) return ['#131A24', '#212936', '#333C49']
-  return ['#0A0D12', '#121822', '#1A212B']
+  if (hour < 5) return ['#120E14', '#1E161D', '#2A1E20']
+  if (hour < 8) return ['#3A2C36', '#8A5C4A', '#D9A272']
+  if (hour < 12) return ['#6C8FA8', '#9FBAC6', '#E2D6BF']
+  if (hour < 16) return ['#7FA3B8', '#B4C6C4', '#EDDCC0']
+  if (hour < 19) return ['#5A4350', '#9A6A54', '#E0A468']
+  if (hour < 22) return ['#2A2028', '#3E2E2E', '#5E4436']
+  return ['#140F12', '#1F171A', '#2C1F1D']
 }
 
-/** Wall/floor colours per location type. Muted materials: plaster, wood, stone. */
+/**
+ * Wall, floor and trim per location type.
+ *
+ * Each room is built from real materials: painted plaster above a wooden
+ * wainscot, boards or tile underfoot, and one accent material that carries the
+ * lamps. Warm hues throughout, with the sage and slate rooms kept desaturated so
+ * the cast never disappears into the set.
+ */
 export const roomPalette: Record<
   string,
-  { wall: [string, string]; floor: string; floorAlt: string; accent: string }
+  { wall: [string, string]; floor: string; floorAlt: string; accent: string; trim: string }
 > = {
-  cafe: { wall: ['#42352A', '#2B231C'], floor: '#6E5942', floorAlt: '#63503B', accent: '#C99A45' },
-  apartment: { wall: ['#333840', '#22262C'], floor: '#4E545C', floorAlt: '#464C54', accent: '#7C93A8' },
-  office: { wall: ['#2C3540', '#1D242C'], floor: '#454E58', floorAlt: '#3E4650', accent: '#4E9DB4' },
-  park: { wall: ['#2C4136', '#1D2C25'], floor: '#4A6549', floorAlt: '#425B42', accent: '#96B96A' },
-  gym: { wall: ['#3B3234', '#28211F'], floor: '#4C4444', floorAlt: '#443D3D', accent: '#C8605A' },
-  restaurant: { wall: ['#40332A', '#2A211A'], floor: '#63503C', floorAlt: '#594734', accent: '#C99A45' },
-  club: { wall: ['#24282F', '#161A20'], floor: '#33383F', floorAlt: '#2C3138', accent: '#C99A45' },
-  beach: { wall: ['#2F5F73', '#204653'], floor: '#B49B6B', floorAlt: '#A68F62', accent: '#4E9DB4' },
-  school: { wall: ['#343C47', '#232931'], floor: '#4B545F', floorAlt: '#434C57', accent: '#4E9DB4' },
-  hospital: { wall: ['#384349', '#242C31'], floor: '#525C62', floorAlt: '#4A545A', accent: '#8FB6BE' },
-  market: { wall: ['#463528', '#2E231A'], floor: '#6B5540', floorAlt: '#604C39', accent: '#B9803A' },
-  museum: { wall: ['#343540', '#23242C'], floor: '#4E4F5A', floorAlt: '#464752', accent: '#7C93A8' },
-  cinema: { wall: ['#26262E', '#18181E'], floor: '#38383F', floorAlt: '#313138', accent: '#8B7A5C' },
-  temple: { wall: ['#47402C', '#2F2A1D'], floor: '#6E6244', floorAlt: '#64593D', accent: '#C99A45' },
-  mountain: { wall: ['#37474F', '#232F36'], floor: '#6E7A82', floorAlt: '#66727A', accent: '#9FB4BE' },
+  cafe: { wall: ['#6E4B33', '#4B3122'], floor: '#A8743F', floorAlt: '#96663A', accent: '#D9A24A', trim: '#3B2417' },
+  apartment: { wall: ['#8C6A52', '#65483A'], floor: '#A9743E', floorAlt: '#976539', accent: '#D8A76A', trim: '#4A2F20' },
+  office: { wall: ['#7A6A5A', '#57493D'], floor: '#8A7255', floorAlt: '#7B6549', accent: '#C69A5A', trim: '#40352B' },
+  park: { wall: ['#6E7A55', '#4A543A'], floor: '#7C8A5A', floorAlt: '#6E7C50', accent: '#B6C17E', trim: '#3E4327' },
+  gym: { wall: ['#6B5348', '#4A3830'], floor: '#7B6353', floorAlt: '#6E5849', accent: '#C6865A', trim: '#382A22' },
+  restaurant: { wall: ['#77543B', '#513A29'], floor: '#A2713F', floorAlt: '#936538', accent: '#E0B05E', trim: '#3D2718' },
+  club: { wall: ['#4A3226', '#2C1C15'], floor: '#5A3E30', floorAlt: '#4E352A', accent: '#D88C4A', trim: '#241610' },
+  beach: { wall: ['#7FA6A6', '#5A8286'], floor: '#E0C68C', floorAlt: '#D2B67C', accent: '#F0CE86', trim: '#4E6B6B' },
+  school: { wall: ['#7C6F58', '#564C3B'], floor: '#9A8158', floorAlt: '#8A7350', accent: '#C9A45A', trim: '#3F3728' },
+  hospital: { wall: ['#8A8578', '#625E51'], floor: '#9C947F', floorAlt: '#8D8672', accent: '#D8C48A', trim: '#494436' },
+  market: { wall: ['#8A5F3E', '#5F3F29'], floor: '#B07C46', floorAlt: '#9E6F40', accent: '#D9A24A', trim: '#43291A' },
+  museum: { wall: ['#8A7A66', '#5E5445'], floor: '#9A8667', floorAlt: '#8C7A5D', accent: '#CDA968', trim: '#453B2C' },
+  cinema: { wall: ['#402C24', '#281A14'], floor: '#563C31', floorAlt: '#4C352B', accent: '#C98A4A', trim: '#221610' },
+  temple: { wall: ['#96794A', '#6A5333'], floor: '#B08E56', floorAlt: '#A0804D', accent: '#E2BE72', trim: '#4A3820' },
+  mountain: { wall: ['#6E6A62', '#4C4A44'], floor: '#8A8378', floorAlt: '#7C766C', accent: '#D9C9A4', trim: '#3A3833' },
 }
 
 export const defaultRoom = roomPalette.apartment

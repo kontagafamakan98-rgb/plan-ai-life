@@ -1,10 +1,16 @@
 /**
  * Stage: the place the Watcher is looking at right now.
  *
- * Layers, back to front: sky (hour-driven), celestial body, clouds and stars,
- * back wall, floor, scenery props, residents (depth-sorted by their floor
- * position), interface overlays. Everything is plain views, so it renders
- * identically on web, iOS and Android.
+ * Layers, back to front: ceiling hint, plaster wall with its windows and
+ * wainscot, skirting, plank floor with light pools, scenery, residents
+ * (depth-sorted), room light wash, interface overlays. Parks, beaches, the
+ * market and the mountain get a real sky and a horizon instead of a wall.
+ *
+ * Art direction: the interface is cold, the world inside the glass is warm.
+ * Every material has a name (plaster, oak, walnut, brass, linen, terracotta,
+ * sage) and every shadow is pulled toward brown by the helpers in game/art.ts,
+ * so nothing on this screen ever turns grey or blue except the Watcher's own
+ * instruments.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +22,8 @@ import {
   StyleSheet,
   Text,
   View,
+  type DimensionValue,
+  type ViewStyle,
 } from 'react-native';
 
 import {
@@ -25,17 +33,21 @@ import {
   roomPalette,
   skyGradient,
   space,
-  type,
   type as typeTokens,
+  world,
 } from '../theme';
-import type { DimensionValue } from 'react-native';
-
+import { ambientLight, mix, warmLight, warmShade, withAlpha } from '../game/art';
 import type { LocationView, Resident } from '../game/types';
 import { glyph } from '../game/icons';
 import { useI18n } from '../game/i18n';
 import { Icon } from './Icon';
 import { usePrefs } from './ui';
-import { ResidentSprite } from './ResidentSprite';
+import {
+  ResidentSprite,
+  SPRITE_BASE_WIDTH,
+  SPRITE_BASE_HEIGHT,
+  SPRITE_GROUND_INSET,
+} from './ResidentSprite';
 
 type PropKind =
   | 'counter'
@@ -58,111 +70,111 @@ type PropKind =
 
 interface Prop {
   kind: PropKind;
-  x: number; // 0..1 across the floor
+  x: number; // 0..1 across the room
   y: number; // 0..1 down the floor
   size?: number;
 }
 
 const SCENERY: Record<string, Prop[]> = {
   cafe: [
-    { kind: 'counter', x: 0.16, y: 0.22 },
-    { kind: 'machine', x: 0.1, y: 0.12 },
-    { kind: 'table', x: 0.68, y: 0.44 },
-    { kind: 'table', x: 0.3, y: 0.66 },
-    { kind: 'plant', x: 0.88, y: 0.2 },
-    { kind: 'lamp', x: 0.52, y: 0.08 },
+    { kind: 'counter', x: 0.2, y: 0.16 },
+    { kind: 'machine', x: 0.06, y: 0.12 },
+    { kind: 'table', x: 0.68, y: 0.42 },
+    { kind: 'table', x: 0.32, y: 0.62 },
+    { kind: 'plant', x: 0.9, y: 0.22 },
+    { kind: 'lamp', x: 0.54, y: 0.06 },
   ],
   apartment: [
-    { kind: 'bed', x: 0.16, y: 0.3 },
-    { kind: 'sofa', x: 0.62, y: 0.6 },
-    { kind: 'shelf', x: 0.86, y: 0.2 },
-    { kind: 'plant', x: 0.42, y: 0.16 },
-    { kind: 'lamp', x: 0.5, y: 0.5 },
+    { kind: 'bed', x: 0.18, y: 0.26 },
+    { kind: 'sofa', x: 0.68, y: 0.56 },
+    { kind: 'shelf', x: 0.88, y: 0.14 },
+    { kind: 'plant', x: 0.4, y: 0.14 },
+    { kind: 'lamp', x: 0.52, y: 0.48 },
   ],
   office: [
-    { kind: 'desk', x: 0.18, y: 0.3 },
-    { kind: 'desk', x: 0.62, y: 0.3 },
-    { kind: 'screen', x: 0.18, y: 0.16 },
-    { kind: 'plant', x: 0.86, y: 0.62 },
-    { kind: 'mat', x: 0.44, y: 0.8 },
+    { kind: 'desk', x: 0.18, y: 0.28 },
+    { kind: 'desk', x: 0.64, y: 0.28 },
+    { kind: 'plant', x: 0.88, y: 0.6 },
+    { kind: 'shelf', x: 0.06, y: 0.5 },
+    { kind: 'mat', x: 0.44, y: 0.82 },
   ],
   park: [
-    { kind: 'tree', x: 0.12, y: 0.24 },
-    { kind: 'tree', x: 0.84, y: 0.3 },
-    { kind: 'bench', x: 0.46, y: 0.62 },
-    { kind: 'plant', x: 0.3, y: 0.78 },
+    { kind: 'tree', x: 0.12, y: 0.2 },
+    { kind: 'tree', x: 0.86, y: 0.26 },
+    { kind: 'bench', x: 0.46, y: 0.58 },
+    { kind: 'plant', x: 0.3, y: 0.76 },
     { kind: 'stones', x: 0.68, y: 0.86 },
   ],
   gym: [
-    { kind: 'machine', x: 0.14, y: 0.28 },
-    { kind: 'machine', x: 0.34, y: 0.28 },
-    { kind: 'bench', x: 0.68, y: 0.46 },
+    { kind: 'machine', x: 0.14, y: 0.24 },
+    { kind: 'machine', x: 0.34, y: 0.24 },
+    { kind: 'bench', x: 0.7, y: 0.44 },
     { kind: 'mat', x: 0.24, y: 0.76 },
-    { kind: 'mat', x: 0.62, y: 0.82 },
+    { kind: 'mat', x: 0.64, y: 0.84 },
   ],
   restaurant: [
-    { kind: 'table', x: 0.2, y: 0.32 },
-    { kind: 'table', x: 0.66, y: 0.4 },
-    { kind: 'counter', x: 0.46, y: 0.12 },
-    { kind: 'plant', x: 0.88, y: 0.7 },
-    { kind: 'lamp', x: 0.36, y: 0.66 },
+    { kind: 'table', x: 0.2, y: 0.3 },
+    { kind: 'table', x: 0.68, y: 0.38 },
+    { kind: 'counter', x: 0.46, y: 0.1 },
+    { kind: 'plant', x: 0.9, y: 0.68 },
+    { kind: 'lamp', x: 0.36, y: 0.64 },
   ],
   club: [
-    { kind: 'stage', x: 0.5, y: 0.16 },
-    { kind: 'machine', x: 0.16, y: 0.6 },
-    { kind: 'lamp', x: 0.28, y: 0.34 },
-    { kind: 'lamp', x: 0.72, y: 0.34 },
+    { kind: 'stage', x: 0.5, y: 0.14 },
+    { kind: 'machine', x: 0.16, y: 0.58 },
+    { kind: 'lamp', x: 0.26, y: 0.3 },
+    { kind: 'lamp', x: 0.74, y: 0.3 },
     { kind: 'mat', x: 0.5, y: 0.72 },
   ],
   beach: [
-    { kind: 'water', x: 0.5, y: 0.1 },
-    { kind: 'tree', x: 0.14, y: 0.52 },
-    { kind: 'bench', x: 0.74, y: 0.6 },
+    { kind: 'water', x: 0.5, y: 0.06 },
+    { kind: 'tree', x: 0.12, y: 0.5 },
+    { kind: 'bench', x: 0.76, y: 0.58 },
     { kind: 'stones', x: 0.4, y: 0.8 },
-    { kind: 'stones', x: 0.62, y: 0.88 },
+    { kind: 'stones', x: 0.62, y: 0.9 },
   ],
   school: [
-    { kind: 'desk', x: 0.22, y: 0.34 },
-    { kind: 'desk', x: 0.5, y: 0.34 },
-    { kind: 'desk', x: 0.78, y: 0.34 },
-    { kind: 'shelf', x: 0.12, y: 0.72 },
-    { kind: 'screen', x: 0.5, y: 0.12 },
+    { kind: 'desk', x: 0.22, y: 0.32 },
+    { kind: 'desk', x: 0.5, y: 0.32 },
+    { kind: 'desk', x: 0.78, y: 0.32 },
+    { kind: 'shelf', x: 0.12, y: 0.7 },
+    { kind: 'mat', x: 0.62, y: 0.76 },
   ],
   hospital: [
-    { kind: 'bed', x: 0.2, y: 0.34 },
-    { kind: 'bed', x: 0.6, y: 0.34 },
-    { kind: 'machine', x: 0.86, y: 0.3 },
-    { kind: 'mat', x: 0.44, y: 0.78 },
+    { kind: 'bed', x: 0.2, y: 0.3 },
+    { kind: 'bed', x: 0.6, y: 0.3 },
+    { kind: 'machine', x: 0.88, y: 0.26 },
+    { kind: 'mat', x: 0.44, y: 0.8 },
   ],
   market: [
-    { kind: 'counter', x: 0.18, y: 0.3 },
-    { kind: 'counter', x: 0.6, y: 0.3 },
-    { kind: 'shelf', x: 0.88, y: 0.52 },
-    { kind: 'plant', x: 0.3, y: 0.74 },
-    { kind: 'stones', x: 0.7, y: 0.8 },
+    { kind: 'counter', x: 0.18, y: 0.28 },
+    { kind: 'counter', x: 0.62, y: 0.28 },
+    { kind: 'shelf', x: 0.9, y: 0.5 },
+    { kind: 'plant', x: 0.3, y: 0.72 },
+    { kind: 'stones', x: 0.72, y: 0.84 },
   ],
   museum: [
-    { kind: 'altar', x: 0.3, y: 0.3 },
-    { kind: 'altar', x: 0.7, y: 0.3 },
+    { kind: 'altar', x: 0.3, y: 0.28 },
+    { kind: 'altar', x: 0.7, y: 0.28 },
     { kind: 'stones', x: 0.14, y: 0.74 },
-    { kind: 'plant', x: 0.86, y: 0.72 },
+    { kind: 'plant', x: 0.88, y: 0.72 },
   ],
   cinema: [
-    { kind: 'screen', x: 0.5, y: 0.1 },
-    { kind: 'bench', x: 0.26, y: 0.52 },
-    { kind: 'bench', x: 0.74, y: 0.52 },
+    { kind: 'screen', x: 0.5, y: 0.08, size: 1.35 },
+    { kind: 'bench', x: 0.26, y: 0.5 },
+    { kind: 'bench', x: 0.74, y: 0.5 },
     { kind: 'bench', x: 0.5, y: 0.82 },
   ],
   temple: [
-    { kind: 'altar', x: 0.5, y: 0.26 },
+    { kind: 'altar', x: 0.5, y: 0.24, size: 1.25 },
     { kind: 'stones', x: 0.18, y: 0.74 },
     { kind: 'stones', x: 0.8, y: 0.74 },
     { kind: 'plant', x: 0.6, y: 0.86 },
   ],
   mountain: [
-    { kind: 'stones', x: 0.2, y: 0.34 },
-    { kind: 'stones', x: 0.7, y: 0.44 },
-    { kind: 'tree', x: 0.88, y: 0.6 },
+    { kind: 'stones', x: 0.2, y: 0.32 },
+    { kind: 'stones', x: 0.7, y: 0.42 },
+    { kind: 'tree', x: 0.88, y: 0.56 },
     { kind: 'stones', x: 0.44, y: 0.82 },
   ],
 };
@@ -173,149 +185,1154 @@ const DEFAULT_SCENERY: Prop[] = [
   { kind: 'stones', x: 0.36, y: 0.8 },
 ];
 
-function SceneryProp({ prop, accent }: { prop: Prop; accent: string }) {
-  const base = {
-    position: 'absolute' as const,
+/** Rooms the Watcher sees from outside: sky and horizon instead of a wall. */
+const OUTDOOR = new Set(['park', 'beach', 'mountain', 'market']);
+
+/** Windows, as fractions of the wall. Interior rooms only. */
+interface Opening {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+const WINDOWS: Record<string, Opening[]> = {
+  cafe: [
+    { x: 0.05, y: 0.14, w: 0.3, h: 0.42 },
+    { x: 0.66, y: 0.14, w: 0.28, h: 0.42 },
+  ],
+  apartment: [{ x: 0.1, y: 0.16, w: 0.28, h: 0.38 }],
+  office: [
+    { x: 0.04, y: 0.12, w: 0.36, h: 0.36 },
+    { x: 0.62, y: 0.12, w: 0.32, h: 0.36 },
+  ],
+  restaurant: [{ x: 0.07, y: 0.16, w: 0.26, h: 0.36 }],
+  school: [
+    { x: 0.08, y: 0.12, w: 0.26, h: 0.36 },
+    { x: 0.66, y: 0.12, w: 0.26, h: 0.36 },
+  ],
+  hospital: [{ x: 0.07, y: 0.12, w: 0.32, h: 0.36 }],
+  gym: [{ x: 0.06, y: 0.16, w: 0.3, h: 0.34 }],
+  museum: [
+    { x: 0.28, y: 0.06, w: 0.16, h: 0.5 },
+    { x: 0.56, y: 0.06, w: 0.16, h: 0.5 },
+  ],
+  temple: [{ x: 0.42, y: 0.04, w: 0.16, h: 0.52 }],
+  club: [],
+  cinema: [],
+};
+
+/** Rooms with no daylight: brass sconces along the wall, at these x fractions. */
+const SCONCES: Record<string, number[]> = {
+  club: [0.16, 0.5, 0.84],
+  cinema: [0.12, 0.88],
+  temple: [0.18, 0.82],
+  museum: [0.14, 0.46, 0.86],
+};
+
+/** Plaster mottling: the wall is not one flat tone, but it never becomes noise. */
+const PLASTER: { x: number; y: number; w: number; h: number; o: number }[] = [
+  { x: 0.04, y: 0.34, w: 0.3, h: 0.3, o: 0.16 },
+  { x: 0.44, y: 0.2, w: 0.36, h: 0.24, o: 0.12 },
+  { x: 0.72, y: 0.44, w: 0.26, h: 0.26, o: 0.14 },
+  { x: 0.24, y: 0.66, w: 0.28, h: 0.2, o: 0.1 },
+];
+
+/** Footprint of each prop, in sprite units, used for anchoring and shadows. */
+const PROP_BOX: Record<PropKind, { w: number; h: number }> = {
+  counter: { w: 136, h: 96 },
+  table: { w: 66, h: 46 },
+  desk: { w: 80, h: 72 },
+  bench: { w: 84, h: 48 },
+  machine: { w: 48, h: 70 },
+  screen: { w: 92, h: 66 },
+  shelf: { w: 56, h: 92 },
+  mat: { w: 96, h: 34 },
+  plant: { w: 48, h: 60 },
+  tree: { w: 104, h: 132 },
+  lamp: { w: 44, h: 96 },
+  water: { w: 190, h: 46 },
+  bed: { w: 110, h: 66 },
+  sofa: { w: 118, h: 68 },
+  altar: { w: 74, h: 80 },
+  stage: { w: 200, h: 100 },
+  stones: { w: 68, h: 32 },
+};
+
+/** Floor boards, near rows first. Widths grow toward the viewer. */
+const FLOOR_ROWS: { h: number; count: number; offset: number; tone: number }[] = [
+  { h: 0.1, count: 7, offset: 0, tone: 0.07 },
+  { h: 0.13, count: 6, offset: 0.5, tone: 0.02 },
+  { h: 0.17, count: 5, offset: 0.22, tone: 0.06 },
+  { h: 0.2, count: 4, offset: 0.68, tone: 0.01 },
+  { h: 0.2, count: 3, offset: 0.34, tone: 0.05 },
+  { h: 0.2, count: 3, offset: 0.82, tone: 0.02 },
+];
+
+type GroundKind = 'grass' | 'sand' | 'rock' | 'cobble';
+
+const GROUND_OF: Record<string, GroundKind> = {
+  park: 'grass',
+  beach: 'sand',
+  mountain: 'rock',
+  market: 'cobble',
+};
+
+const STARS: { top: number; left: DimensionValue; size: number }[] = [
+  { top: 14, left: '10%', size: 2 },
+  { top: 30, left: '32%', size: 1.4 },
+  { top: 12, left: '58%', size: 2.4 },
+  { top: 38, left: '78%', size: 1.6 },
+  { top: 52, left: '22%', size: 1.2 },
+  { top: 24, left: '90%', size: 1.8 },
+];
+
+const CLOUDS: { top: number; left: DimensionValue; width: number; o: number }[] = [
+  { top: 16, left: '6%', width: 72, o: 0.5 },
+  { top: 34, left: '44%', width: 52, o: 0.4 },
+  { top: 10, left: '70%', width: 44, o: 0.44 },
+  { top: 46, left: '18%', width: 38, o: 0.3 },
+];
+
+const BIRDS: { top: number; left: DimensionValue; tilt: number }[] = [
+  { top: 26, left: '30%', tilt: -8 },
+  { top: 20, left: '38%', tilt: 6 },
+  { top: 36, left: '64%', tilt: -4 },
+];
+
+/* ------------------------------------------------------------------ *
+ * Wall
+ * ------------------------------------------------------------------ */
+
+/**
+ * One window: a wooden frame, the sky seen through it, and the warm spill it
+ * throws on the room. The glass shows the real hour, so a late cycle looks out
+ * on a night city instead of a flat pane.
+ */
+function Window({
+  rect,
+  wall,
+  sky,
+  trim,
+  night,
+  hour,
+}: {
+  rect: Opening;
+  wall: { width: number; height: number };
+  sky: [string, string, ...string[]];
+  trim: string;
+  night: boolean;
+  hour: number;
+}) {
+  const width = rect.w * wall.width;
+  const height = rect.h * wall.height;
+  const frameLit = warmLight(trim, 22, 0.24);
+  const frameDeep = warmShade(trim, -18, 0.3);
+  const dusk = hour >= 17 && hour < 20;
+
+  return (
+    <View
+      style={[
+        styles.windowBox,
+        {
+          left: rect.x * wall.width,
+          top: rect.y * wall.height,
+          width,
+          height: height + 8,
+        },
+      , { pointerEvents: 'none' }]}
+    >
+      <View
+        style={[
+          styles.windowFrame,
+          { borderColor: frameDeep, backgroundColor: frameLit },
+        ]}
+      >
+        <LinearGradient
+          colors={sky}
+          start={{ x: 0.2, y: 0 }}
+          end={{ x: 0.8, y: 1 }}
+          style={styles.windowGlass}
+        >
+          {night ? (
+            <View style={styles.windowLights}>
+              {[0.22, 0.46, 0.74].map((x, index) => (
+                <View
+                  key={x}
+                  style={[
+                    styles.cityLight,
+                    {
+                      left: `${x * 100}%`,
+                      backgroundColor: withAlpha(world.glow, index === 1 ? 0.85 : 0.6),
+                      top: index === 1 ? 8 : 14,
+                    },
+                  ]}
+                />
+              ))}
+            </View>
+          ) : null}
+          {dusk ? (
+            <View style={[styles.windowBloom, { backgroundColor: withAlpha(world.glow, 0.3) }]} />
+          ) : null}
+          <View style={[styles.mullion, { backgroundColor: frameLit, left: width / 2 - 9 }]} />
+          <View
+            style={[
+              styles.transom,
+              { backgroundColor: frameLit, top: height * 0.3, width: width - 10 },
+            ]}
+          />
+          <View style={[styles.glassSheen, { backgroundColor: withAlpha(world.rim, 0.14) }]} />
+        </LinearGradient>
+      </View>
+      <View style={[styles.windowSill, { backgroundColor: warmLight(trim, 12, 0.2) }]}>
+        <View style={[styles.windowSillShade, { backgroundColor: withAlpha(frameDeep, 0.5) }]} />
+      </View>
+    </View>
+  );
+}
+
+/** Sconce: a brass plate with a lit shade, for rooms with no daylight. */
+function Sconce({ x, wall }: { x: number; wall: { width: number; height: number } }) {
+  return (
+    <View
+      style={[styles.sconce, { left: x * wall.width - 9, top: wall.height * 0.3 }, { pointerEvents: 'none' }]}
+    >
+      <View style={[styles.sconceGlow, { backgroundColor: withAlpha(world.glow, 0.3) }]} />
+      <View style={[styles.sconceArm, { backgroundColor: world.brassDark }]} />
+      <View style={[styles.sconceShade, { backgroundColor: world.brass }]}>
+        <View style={[styles.sconceBulb, { backgroundColor: world.glowSoft }]} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The back wall of an interior: plaster without windows that face the sky,
+ * painted plaster above a wooden wainscot, a chair rail, and the warm light the
+ * openings and the sconces throw across it.
+ */
+function Wall({
+  roomType,
+  room,
+  wall,
+  sky,
+  hour,
+}: {
+  roomType: string;
+  room: { wall: [string, string]; accent: string; trim: string };
+  wall: { width: number; height: number };
+  sky: [string, string, ...string[]];
+  hour: number;
+}) {
+  const night = hour < 6 || hour >= 20;
+  const windows = WINDOWS[roomType] ?? [];
+  // No daylight means lamps on the wall, so no room is ever left unlit.
+  const sconces = windows.length ? [] : SCONCES[roomType] ?? [0.24, 0.76];
+  const ambient = ambientLight(hour);
+  const plaster = mix(room.wall[0], world.plaster, 0.16);
+  const plasterLow = mix(room.wall[1], world.walnut, 0.24);
+  const wainscot = mix(world.wainscot, room.accent, 0.1);
+  const rail = warmLight(wainscot, 24, 0.24);
+  const ceiling = mix(room.wall[1], world.shadow, 0.42);
+
+  return (
+    <View style={[styles.wall, { height: wall.height }]}>
+      {/* Painted plaster, lit from above. */}
+      <View style={[styles.plasterField, { backgroundColor: plaster }]} />
+      <LinearGradient
+        colors={['transparent', withAlpha(plasterLow, 0.5)]}
+        locations={[0.35, 1]}
+        style={[styles.plasterField, { pointerEvents: 'none' }]}
+      />
+      {PLASTER.map((patch, index) => (
+        <View
+          key={index}
+          style={[
+            styles.plasterPatch,
+            {
+              left: patch.x * wall.width,
+              top: patch.y * wall.height,
+              width: patch.w * wall.width,
+              height: patch.h * wall.height,
+              backgroundColor: withAlpha(world.shadow, patch.o),
+            },
+          ]}
+        />
+      ))}
+
+      {/* Ceiling hint and cornice, so the wall reads as a wall and not as a sky. */}
+      <View
+        style={[
+          styles.ceiling,
+          { height: wall.height * 0.1, backgroundColor: ceiling, opacity: 0.85 },
+        ]}
+      >
+        <LinearGradient
+          colors={[withAlpha(world.shadow, 0.4), 'transparent']}
+          style={StyleSheet.absoluteFill}
+        />
+      </View>
+      <View style={[styles.cornice, { backgroundColor: mix(plaster, world.rim, 0.24) }]} />
+      <View style={[styles.corniceShade, { backgroundColor: withAlpha(world.shadow, 0.24) }]} />
+
+      {/* Openings. */}
+      {windows.map((rect, index) => (
+        <Window
+          key={index}
+          rect={rect}
+          wall={wall}
+          sky={sky}
+          trim={room.trim}
+          night={night}
+          hour={hour}
+        />
+      ))}
+
+      {/* Warm spill from each opening, on the plaster below the sill. */}
+      {windows.map((rect, index) => (
+        <View
+          key={`spill-${index}`}
+          style={[
+            styles.spill,
+            {
+              left: rect.x * wall.width - 6,
+              top: (rect.y + rect.h) * wall.height,
+              width: rect.w * wall.width + 12,
+              height: wall.height * 0.42,
+            },
+          , { pointerEvents: 'none' }]}
+        >
+          <LinearGradient
+            colors={[
+              withAlpha(world.glow, 0.22 * ambient.intensity + 0.06),
+              withAlpha(world.glow, 0.06),
+              'transparent',
+            ]}
+            locations={[0, 0.55, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      ))}
+
+      {/* Wainscot: wood below, plaster above. */}
+      <View
+        style={[
+          styles.wainscot,
+          {
+            height: wall.height * 0.3,
+            backgroundColor: wainscot,
+            borderTopColor: rail,
+            borderBottomColor: withAlpha(world.shadow, 0.4),
+          },
+        ]}
+      >
+        {[0.12, 0.32, 0.52, 0.72, 0.9].map((x) => (
+          <View
+            key={x}
+            style={[
+              styles.wainscotPanel,
+              {
+                left: x * wall.width,
+                borderColor: withAlpha(world.shadow, 0.26),
+                backgroundColor: withAlpha(world.oak, 0.14),
+              },
+            ]}
+          />
+        ))}
+        <View style={[styles.wainscotGrain, { backgroundColor: withAlpha(world.oak, 0.18) }]} />
+      </View>
+
+      {sconces.map((x) => (
+        <Sconce key={x} x={x} wall={wall} />
+      ))}
+
+      {/* Overall wash: warm at dusk and night, plain at noon. */}
+      <LinearGradient
+        colors={[
+          withAlpha(world.haze, 0.16 * ambient.warmth),
+          'transparent',
+          withAlpha(world.shadow, 0.3),
+        ]}
+        locations={[0, 0.42, 1]}
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+      />
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Floors
+ * ------------------------------------------------------------------ */
+
+/**
+ * Indoor floor: staggered boards in two oak tones, with the light that falls
+ * through each window lying on top of them.
+ */
+function PlankFloor({
+  room,
+  floorHeight,
+  openings,
+  wall,
+  hour,
+}: {
+  room: { floor: string; floorAlt: string; trim: string };
+  floorHeight: number;
+  openings: Opening[];
+  wall: { width: number; height: number };
+  hour: number;
+}) {
+  const ambient = ambientLight(hour);
+  let cursor = 0;
+  const rows = FLOOR_ROWS.map((row) => {
+    const top = cursor;
+    cursor += row.h;
+    return { ...row, top };
+  });
+
+  return (
+    <View style={[styles.floor, { height: floorHeight, backgroundColor: room.floor }]}>
+      {rows.map((row, rowIndex) => (
+        <View
+          key={rowIndex}
+          style={[styles.floorRow, { top: `${row.top * 100}%`, height: `${row.h * 100}%` }]}
+        >
+          {Array.from({ length: row.count }).map((_, index) => {
+            const width = 1 / row.count;
+            const left = row.offset * width + index * width - 0.08;
+            const dark = index % 2 === 0 ? row.tone : row.tone * 0.4;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.plank,
+                  {
+                    left: `${(left - 0.012) * 100}%`,
+                    width: `${(width + 0.024) * 100}%`,
+                    backgroundColor: mix(room.floorAlt, world.shadow, dark),
+                    borderBottomColor: withAlpha(world.shadow, 0.22),
+                  },
+                ]}
+              >
+                <View
+                  style={[
+                    styles.plankGrain,
+                    {
+                      width: `${40 + ((index * 17 + rowIndex * 23) % 45)}%`,
+                      backgroundColor: withAlpha(world.shadow, 0.14),
+                    },
+                  ]}
+                />
+                <View style={[styles.plankTop, { backgroundColor: withAlpha(world.rim, 0.05) }]} />
+              </View>
+            );
+          })}
+        </View>
+      ))}
+
+      {/* Light pools under the openings. */}
+      {openings.map((rect, index) => (
+        <View
+          key={`pool-${index}`}
+          style={[
+            styles.lightPool,
+            {
+              left: (rect.x + rect.w / 2) * wall.width - rect.w * wall.width * 0.75,
+              width: rect.w * wall.width * 1.5,
+              height: floorHeight * 0.8,
+              opacity: 0.1 + ambient.intensity * 0.16,
+            },
+          , { pointerEvents: 'none' }]}
+        >
+          <LinearGradient
+            colors={['transparent', withAlpha(world.glow, 0.4), withAlpha(world.glow, 0.08)]}
+            locations={[0, 0.42, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      ))}
+
+      {/* Warm haze where the floor meets the wall. */}
+      <LinearGradient
+        colors={[withAlpha(world.haze, 0.24), withAlpha(world.haze, 0.06), 'transparent']}
+        locations={[0, 0.35, 1]}
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+      />
+      <LinearGradient
+        colors={['transparent', withAlpha(world.shadow, 0.34)]}
+        locations={[0.55, 1]}
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+      />
+    </View>
+  );
+}
+
+/** Outdoor ground: grass, sand, rock slabs or cobbles, hazy at the horizon. */
+function Ground({
+  kind,
+  room,
+  height,
+}: {
+  kind: GroundKind;
+  room: { floor: string; floorAlt: string };
+  height: number;
+}) {
+  const base = mix(room.floor, kind === 'sand' ? world.sand : world.sage, 0.18);
+  const tuftColor = withAlpha(world.sageDark, 0.4);
+  const fleckCount = kind === 'rock' ? 12 : 22;
+
+  return (
+    <View style={[styles.floor, { height, backgroundColor: base }]}>
+      <LinearGradient
+        colors={[withAlpha(world.haze, 0.55), withAlpha(world.haze, 0.16), 'transparent']}
+        locations={[0, 0.4, 1]}
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+      />
+      {kind === 'grass'
+        ? Array.from({ length: fleckCount }).map((_, index) => {
+            const x = (index * 37) % 100;
+            const y = 12 + ((index * 53) % 80);
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.tuft,
+                  {
+                    left: `${x}%`,
+                    top: `${y}%`,
+                    height: 6 + (index % 3) * 4,
+                    backgroundColor: tuftColor,
+                  },
+                ]}
+              />
+            );
+          })
+        : null}
+      {kind === 'sand'
+        ? Array.from({ length: 6 }).map((_, index) => (
+            <View
+              key={index}
+              style={[
+                styles.ripple,
+                {
+                  top: `${14 + index * 14}%`,
+                  left: `${(index % 2) * 6}%`,
+                  right: `${(index % 3) * 4}%`,
+                  backgroundColor: withAlpha(world.shadow, 0.1),
+                },
+              ]}
+            />
+          ))
+        : null}
+      {kind === 'rock' || kind === 'cobble'
+        ? Array.from({ length: fleckCount }).map((_, index) => {
+            const x = (index * 31) % 96;
+            const y = 10 + ((index * 47) % 84);
+            const w = kind === 'rock' ? 26 + (index % 4) * 14 : 16 + (index % 3) * 8;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.slab,
+                  {
+                    left: `${x}%`,
+                    top: `${y}%`,
+                    width: w,
+                    height: kind === 'rock' ? 8 + (index % 3) * 5 : 7,
+                    borderRadius: kind === 'cobble' ? 5 : radius.xs,
+                    backgroundColor: withAlpha(mix(room.floorAlt, world.shadow, 0.18), 0.55),
+                    borderColor: withAlpha(world.rim, 0.08),
+                  },
+                ]}
+              >
+                <View style={[styles.slabLit, { backgroundColor: withAlpha(world.rim, 0.12) }]} />
+              </View>
+            );
+          })
+        : null}
+      <View style={[styles.groundEdge, { backgroundColor: withAlpha(world.shadow, 0.18) }]} />
+    </View>
+  );
+}
+
+/** Distant scenery behind an outdoor room: skyline, sea band or ridges. */
+function Horizon({
+  type,
+  room,
+  width,
+  horizon,
+  height,
+}: {
+  type: string;
+  room: { wall: [string, string]; accent: string };
+  width: number;
+  horizon: number;
+  height: number;
+}) {
+  const far = mix(room.wall[1], world.haze, 0.35);
+  const mid = mix(room.wall[0], world.haze, 0.22);
+
+  if (type === 'beach') {
+    return (
+      <View style={[styles.horizon, { top: horizon - height, height }, { pointerEvents: 'none' }]}>
+        <View style={[styles.seaBand, { backgroundColor: withAlpha(mix(world.sage, room.accent, 0.5), 0.5) }]}>
+          <View style={[styles.seaLine, { backgroundColor: withAlpha(world.rim, 0.35) }]} />
+          <View style={[styles.seaLine, { top: '62%', backgroundColor: withAlpha(world.rim, 0.2) }]} />
+        </View>
+      </View>
+    );
+  }
+
+  if (type === 'mountain') {
+    return (
+      <View style={[styles.horizon, { top: horizon - height, height }, { pointerEvents: 'none' }]}>
+        <View
+          style={[
+            styles.ridge,
+            { left: -width * 0.1, width: width * 0.7, height: height * 0.5, backgroundColor: far },
+          ]}
+        />
+        <View
+          style={[
+            styles.ridge,
+            { left: width * 0.4, width: width * 0.8, height: height * 0.7, backgroundColor: mid },
+          ]}
+        />
+        <View style={[styles.ridgeCap, { left: width * 0.62, backgroundColor: withAlpha(world.rim, 0.3) }]} />
+      </View>
+    );
+  }
+
+  // Park and market: a low skyline of warm blocks with lit windows at night.
+  const blocks = [0.06, 0.2, 0.32, 0.46, 0.62, 0.78, 0.9];
+  return (
+    <View style={[styles.horizon, { top: horizon - height, height }, { pointerEvents: 'none' }]}>
+      {blocks.map((x, index) => {
+        const blockHeight = height * (0.26 + ((index * 7) % 5) * 0.09);
+        return (
+          <View
+            key={x}
+            style={[
+              styles.block,
+              {
+                left: x * width,
+                width: width * 0.11,
+                height: blockHeight,
+                backgroundColor: mix(far, world.shadow, 0.18 + (index % 3) * 0.08),
+              },
+            ]}
+          >
+            <View style={[styles.blockRoof, { backgroundColor: withAlpha(world.rim, 0.16) }]} />
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Scenery
+ * ------------------------------------------------------------------ */
+
+/**
+ * One piece of furniture, built from materials.
+ *
+ * Each prop is a small stack of layers: a lit top face, a darker body, and two
+ * or three details (a rail, a drawer, a brass fitting) so the room reads as a
+ * place somebody works in rather than as a block of colour. Every tone is
+ * derived from the room's accent and the world palette with warm shading.
+ */
+/**
+ * One piece of furniture, built from materials.
+ *
+ * Every prop is drawn inside a fixed box whose bottom edge is the point where it
+ * touches the floor, so a table, a bed and a lamp all stand on the same line.
+ * Parts are placed from that line with explicit offsets rather than by a flow,
+ * which is what lets a top slab sit on its own body, a drawer sit between two
+ * panels, and a lamp throw a pool of light on the boards.
+ */
+function SceneryProp({ prop, accent, trim }: { prop: Prop; accent: string; trim: string }) {
+  const box = PROP_BOX[prop.kind] ?? PROP_BOX.table;
+  const scale = prop.size ?? 1;
+  const wrapper: ViewStyle = {
+    position: 'absolute',
     left: `${prop.x * 100}%`,
     top: `${prop.y * 100}%`,
+    width: box.w,
+    height: box.h,
+    marginLeft: -box.w / 2,
+    marginTop: -box.h,
+    transform: [{ scale }],
+    transformOrigin: 'bottom center',
   };
+  const accentLit = warmLight(accent, 26, 0.28);
+  const accentDeep = warmShade(accent, -30, 0.3);
+  const woodTop = world.oak;
+  const woodDeep = world.walnut;
+  const shadow = (width: number, alpha = 0.32) => (
+    <View
+      style={[
+        styles.contact,
+        { width, left: (box.w - width) / 2, backgroundColor: withAlpha(world.shadow, alpha) },
+      ]}
+    />
+  );
+
+  const id = `stage-prop-${prop.kind}`;
+
   switch (prop.kind) {
     case 'counter':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.counterTop, { backgroundColor: accent }]} />
-          <View style={styles.counterBody} />
+        <View style={wrapper} testID={id}>
+          {shadow(128)}
+          <View style={[styles.counterBody, { backgroundColor: woodDeep, borderColor: trim }]}>
+            {[0, 1, 2].map((index) => (
+              <View
+                key={index}
+                style={[
+                  styles.counterPanel,
+                  {
+                    borderColor: withAlpha(world.brass, 0.28),
+                    backgroundColor: withAlpha(world.oak, 0.14),
+                  },
+                ]}
+              />
+            ))}
+          </View>
+          <View style={[styles.counterRail, { backgroundColor: world.brass }]}>
+            <View style={[styles.counterRailLit, { backgroundColor: withAlpha(world.rim, 0.5) }]} />
+          </View>
+          <View style={[styles.counterTop, { backgroundColor: woodTop, borderColor: woodDeep }]}>
+            <View style={[styles.counterTopLit, { backgroundColor: withAlpha(world.rim, 0.16) }]} />
+          </View>
+          <View style={styles.counterItems}>
+            <View
+              style={[
+                styles.cup,
+                { backgroundColor: world.linen, borderColor: withAlpha(world.shadow, 0.3) },
+              ]}
+            >
+              <View
+                style={[styles.part, styles.cupRim, { backgroundColor: withAlpha(world.shadow, 0.35) }]}
+              />
+            </View>
+            <View
+              style={[
+                styles.cup,
+                {
+                  backgroundColor: warmLight(world.linen, -14, 0.2),
+                  borderColor: withAlpha(world.shadow, 0.3),
+                },
+              ]}
+            />
+            <View
+              style={[
+                styles.jar,
+                { backgroundColor: withAlpha(world.brass, 0.92), borderColor: world.brassDark },
+              ]}
+            >
+              <View style={[styles.part, styles.jarNeck, { backgroundColor: world.brassDark }]} />
+            </View>
+          </View>
         </View>
       );
+
     case 'table':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.tableTop, { backgroundColor: accent }]} />
-          <View style={styles.tableLeg} />
+        <View style={wrapper} testID={id}>
+          {shadow(58, 0.28)}
+          <View style={[styles.tableFoot, { backgroundColor: warmShade(woodDeep, -12, 0.3) }]} />
+          <View style={[styles.tableColumn, { backgroundColor: woodDeep }]}>
+            <View
+              style={[styles.part, styles.tableColumnLit, { backgroundColor: withAlpha(world.oak, 0.34) }]}
+            />
+          </View>
+          <View style={[styles.tableApron, { backgroundColor: woodDeep }]}>
+            <View
+              style={[styles.part, styles.tableApronLit, { backgroundColor: withAlpha(world.rim, 0.12) }]}
+            />
+          </View>
+          <View style={[styles.tableTop, { backgroundColor: woodTop, borderColor: woodDeep }]}>
+            <View style={[styles.part, styles.tableTopLit, { backgroundColor: withAlpha(world.rim, 0.14) }]} />
+          </View>
         </View>
       );
+
     case 'desk':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.deskTop, { backgroundColor: accent }]} />
-          <View style={styles.deskLeg} />
+        <View style={wrapper} testID={id}>
+          {shadow(72, 0.3)}
+          <View style={[styles.deskBody, { backgroundColor: woodDeep, borderColor: trim }]}>
+            {[0, 1].map((index) => (
+              <View key={index} style={[styles.deskDrawer, { borderColor: withAlpha(world.brass, 0.34) }]}>
+                <View style={[styles.deskHandle, { backgroundColor: world.brass }]} />
+              </View>
+            ))}
+          </View>
+          <View style={[styles.deskTop, { backgroundColor: woodTop, borderColor: woodDeep }]}>
+            <View style={[styles.part, styles.deskTopLit, { backgroundColor: withAlpha(world.rim, 0.14) }]} />
+          </View>
+          <View style={styles.deskItems}>
+            <View style={styles.deskLamp}>
+              <View style={[styles.lampHead, { backgroundColor: world.brass }]}>
+                <View style={[styles.deskBulb, { backgroundColor: world.glowSoft }]} />
+              </View>
+              <View style={[styles.lampStem, { backgroundColor: world.brassDark }]} />
+            </View>
+            <View
+              style={[styles.papers, { backgroundColor: world.linen, borderColor: withAlpha(world.shadow, 0.2) }]}
+            >
+              <View
+                style={[styles.part, styles.paperLine, { backgroundColor: withAlpha(world.shadow, 0.22) }]}
+              />
+              <View
+                style={[
+                  styles.part,
+                  styles.paperLine,
+                  { top: 3, width: 14, backgroundColor: withAlpha(world.shadow, 0.18) },
+                ]}
+              />
+            </View>
+          </View>
         </View>
       );
+
     case 'bench':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.benchSeat, { backgroundColor: accent }]} />
-          <View style={styles.benchBack} />
+        <View style={wrapper} testID={id}>
+          {shadow(74, 0.3)}
+          <View style={[styles.benchLeg, { left: 8, backgroundColor: warmShade(trim, -22, 0.4) }]} />
+          <View style={[styles.benchLeg, { right: 8, backgroundColor: warmShade(trim, -22, 0.4) }]} />
+          <View style={[styles.benchSeat, { backgroundColor: woodTop, borderColor: woodDeep }]}>
+            {[0, 1, 2].map((index) => (
+              <View
+                key={index}
+                style={[
+                  styles.benchSeam,
+                  { left: 10 + index * 22, backgroundColor: withAlpha(world.shadow, 0.3) },
+                ]}
+              />
+            ))}
+          </View>
+          <View style={[styles.benchBack, { backgroundColor: woodDeep }]}>
+            <View style={[styles.benchBar, { backgroundColor: woodTop }]} />
+            <View style={[styles.benchBar, { backgroundColor: woodTop }]} />
+          </View>
         </View>
       );
+
     case 'machine':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.machineBody, { borderColor: `${accent}88` }]}>
-            <View style={[styles.machineLight, { backgroundColor: accent }]} />
+        <View style={wrapper} testID={id}>
+          {shadow(42, 0.3)}
+          <View style={[styles.machineBase, { backgroundColor: warmShade(trim, -24, 0.4) }]} />
+          <View
+            style={[
+              styles.machineBody,
+              { borderColor: accentDeep, backgroundColor: mix(trim, world.shadow, 0.45) },
+            ]}
+          >
+            <View style={[styles.machinePanel, { borderColor: withAlpha(accentLit, 0.4) }]}>
+              <View
+                style={[styles.machineDial, { backgroundColor: world.brass, borderColor: world.brassDark }]}
+              />
+              <View
+                style={[styles.machineDial, { backgroundColor: world.brassDark, borderColor: world.brass }]}
+              />
+            </View>
+            <View style={[styles.machineLight, { backgroundColor: accentLit }]}>
+              <View
+                style={[styles.part, styles.machineHalo, { backgroundColor: withAlpha(accentLit, 0.32) }]}
+              />
+            </View>
           </View>
         </View>
       );
+
     case 'screen':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.screen, { borderColor: `${accent}99` }]}>
-            <View style={[styles.screenGlow, { backgroundColor: `${accent}33` }]} />
+        <View style={wrapper} testID={id}>
+          {shadow(80, 0.3)}
+          <View style={[styles.screenBase, { backgroundColor: warmShade(woodDeep, -10, 0.3) }]} />
+          <View style={[styles.screenStand, { backgroundColor: woodDeep }]} />
+          <View
+            style={[
+              styles.screenFrame,
+              { borderColor: trim, backgroundColor: withAlpha(world.shadow, 0.92) },
+            ]}
+          >
+            <LinearGradient
+              colors={[
+                withAlpha(world.glow, 0.42),
+                withAlpha(world.glow, 0.14),
+                withAlpha(accentDeep, 0.32),
+              ]}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={styles.screenGlow}
+            />
+            <View style={[styles.screenLine, { backgroundColor: withAlpha(world.rim, 0.35) }]} />
+            <View
+              style={[
+                styles.screenLine,
+                { top: '62%', width: '52%', backgroundColor: withAlpha(world.rim, 0.2) },
+              ]}
+            />
+            <View style={[styles.part, styles.screenSheen, { backgroundColor: withAlpha(world.rim, 0.12) }]} />
           </View>
-          <View style={styles.screenStand} />
         </View>
       );
+
     case 'shelf':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.shelf, { borderColor: `${accent}77` }]}>
-            <View style={[styles.shelfBook, { backgroundColor: accent }]} />
-            <View style={[styles.shelfBook, { backgroundColor: palette.steel, width: 5 }]} />
-            <View style={[styles.shelfBook, { backgroundColor: palette.accent, width: 4 }]} />
+        <View style={wrapper} testID={id}>
+          {shadow(48, 0.28)}
+          <View
+            style={[styles.shelf, { borderColor: woodDeep, backgroundColor: withAlpha(world.shadow, 0.36) }]}
+          >
+            <View style={[styles.shelfBay, { borderBottomColor: woodTop }]} />
+            <View style={[styles.shelfBay, { borderBottomColor: woodTop }]}>
+              <View style={styles.shelfBooks}>
+                <View style={[styles.shelfBook, { backgroundColor: world.terracotta, height: 19 }]} />
+                <View style={[styles.shelfBook, { backgroundColor: world.sage, height: 15, width: 5 }]} />
+                <View style={[styles.shelfBook, { backgroundColor: accentLit, height: 20, width: 4 }]} />
+                <View style={[styles.shelfBook, { backgroundColor: world.brass, height: 14, width: 6 }]} />
+              </View>
+            </View>
+            <View style={[styles.shelfBay, { borderBottomColor: woodTop }]}>
+              <View style={[styles.shelfBasket, { backgroundColor: withAlpha(world.sand, 0.7) }]}>
+                <View
+                  style={[styles.part, styles.basketWeave, { backgroundColor: withAlpha(world.shadow, 0.22) }]}
+                />
+              </View>
+            </View>
           </View>
         </View>
       );
+
     case 'mat':
-      return <View style={[styles.prop, base, styles.mat, { backgroundColor: `${accent}44` }]} />;
+      return (
+        <View style={wrapper} testID={id}>
+          <View
+            style={[styles.mat, { backgroundColor: mix(accent, world.walnut, 0.38), borderColor: accentDeep }]}
+          >
+            <View style={[styles.part, styles.matBorder, { borderColor: withAlpha(world.rim, 0.2) }]} />
+            <View style={[styles.part, styles.matWeave, { backgroundColor: withAlpha(world.shadow, 0.14) }]} />
+            <View
+              style={[
+                styles.part,
+                styles.matWeave,
+                { top: '62%', backgroundColor: withAlpha(world.shadow, 0.1) },
+              ]}
+            />
+          </View>
+        </View>
+      );
+
     case 'plant':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.leaf, { backgroundColor: accent }]} />
-          <View style={[styles.leafAlt, { backgroundColor: accent }]} />
-          <View style={styles.pot} />
+        <View style={wrapper} testID={id}>
+          {shadow(34, 0.26)}
+          <View
+            style={[
+              styles.pot,
+              { backgroundColor: world.terracotta, borderColor: warmShade(world.terracotta, -30, 0.35) },
+            ]}
+          >
+            <View
+              style={[styles.part, styles.potRim, { backgroundColor: warmLight(world.terracotta, 18, 0.22) }]}
+            />
+          </View>
+          <View style={[styles.stem, { backgroundColor: world.sageDark }]} />
+          <View style={[styles.leaf, { backgroundColor: world.sage }]} />
+          <View style={[styles.leafAlt, { backgroundColor: warmLight(world.sage, 18, 0.24) }]} />
+          <View style={[styles.leafSide, { backgroundColor: warmShade(world.sage, -12, 0.3) }]} />
         </View>
       );
+
     case 'tree':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.canopy, { backgroundColor: accent }]} />
-          <View style={[styles.canopyAlt, { backgroundColor: accent }]} />
-          <View style={styles.trunk} />
+        <View style={wrapper} testID={id}>
+          {shadow(40, 0.34)}
+          <View style={[styles.trunk, { backgroundColor: world.walnut }]}>
+            <View style={[styles.part, styles.bark, { backgroundColor: withAlpha(world.shadow, 0.32) }]} />
+            <View
+              style={[styles.part, styles.bark, { left: 6, backgroundColor: withAlpha(world.oak, 0.35) }]}
+            />
+          </View>
+          <View style={[styles.canopy, { backgroundColor: world.sageDark }]} />
+          <View style={[styles.canopyMid, { backgroundColor: warmShade(world.sage, -6, 0.26) }]} />
+          <View style={[styles.canopyLit, { backgroundColor: warmLight(world.sage, 22, 0.3) }]} />
         </View>
       );
+
     case 'lamp':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.lampGlow, { backgroundColor: `${accent}55` }]} />
-          <View style={[styles.lampBulb, { backgroundColor: accent }]} />
+        <View style={wrapper} testID={id}>
+          <View style={[styles.part, styles.lampPool, { backgroundColor: withAlpha(world.glow, 0.16) }]} />
+          <View style={[styles.part, styles.lampHalo, { backgroundColor: withAlpha(world.glow, 0.24) }]} />
+          <View style={[styles.lampBase, { backgroundColor: warmShade(world.brassDark, -18, 0.36) }]} />
+          <View style={[styles.lampPole, { backgroundColor: world.brassDark }]} />
+          <View style={[styles.lampGlass, { backgroundColor: world.glowSoft }]} />
+          <View style={[styles.lampShade, { backgroundColor: world.brass, borderColor: world.brassDark }]}>
+            <View
+              style={[styles.part, styles.lampShadeLit, { backgroundColor: withAlpha(world.glowSoft, 0.4) }]}
+            />
+          </View>
         </View>
       );
+
     case 'water':
-      return <View style={[styles.prop, base, styles.water, { backgroundColor: `${accent}55` }]} />;
+      return (
+        <View style={wrapper} testID={id}>
+          <View style={[styles.wetSand, { backgroundColor: withAlpha(world.sand, 0.5) }]} />
+          <View
+            style={[
+              styles.water,
+              { backgroundColor: withAlpha(accent, 0.55), borderColor: withAlpha(accentLit, 0.55) },
+            ]}
+          >
+            <LinearGradient
+              colors={[withAlpha(world.rim, 0.28), withAlpha(accentDeep, 0.42)]}
+              start={{ x: 0.2, y: 0 }}
+              end={{ x: 0.8, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={[styles.part, styles.waterLine, { backgroundColor: withAlpha(world.rim, 0.42) }]} />
+            <View
+              style={[
+                styles.part,
+                styles.waterLine,
+                { top: '54%', width: '46%', backgroundColor: withAlpha(world.rim, 0.26) },
+              ]}
+            />
+            <View
+              style={[
+                styles.part,
+                styles.waterLine,
+                { top: '74%', width: '30%', backgroundColor: withAlpha(world.rim, 0.18) },
+              ]}
+            />
+          </View>
+        </View>
+      );
+
     case 'bed':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.bedBody, { backgroundColor: accent }]} />
-          <View style={styles.bedPillow} />
+        <View style={wrapper} testID={id}>
+          {shadow(98, 0.3)}
+          <View style={[styles.bedLeg, { left: 8, backgroundColor: woodDeep }]} />
+          <View style={[styles.bedLeg, { right: 8, backgroundColor: woodDeep }]} />
+          <View style={[styles.bedHead, { backgroundColor: woodDeep }]}>
+            {[0, 1, 2].map((index) => (
+              <View key={index} style={[styles.bedSlat, { backgroundColor: woodTop }]} />
+            ))}
+          </View>
+          <View style={[styles.bedFrame, { backgroundColor: warmShade(woodDeep, -12, 0.3) }]} />
+          <View
+            style={[styles.bedMattress, { backgroundColor: world.linen, borderColor: warmShade(world.linen, -28) }]}
+          >
+            <View style={[styles.part, styles.bedSheet, { backgroundColor: withAlpha(world.rim, 0.45) }]} />
+          </View>
+          <View
+            style={[styles.bedPillow, { left: 12, backgroundColor: warmLight(world.linen, 12, 0.24) }]}
+          />
+          <View style={[styles.bedPillow, { left: 44, width: 26, backgroundColor: world.linen }]} />
+          <View style={[styles.bedThrow, { backgroundColor: accent, borderColor: accentDeep }]}>
+            <View style={[styles.part, styles.bedFold, { backgroundColor: withAlpha(world.shadow, 0.2) }]} />
+          </View>
         </View>
       );
+
     case 'sofa':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.sofaBody, { backgroundColor: accent }]} />
-          <View style={styles.sofaArm} />
+        <View style={wrapper} testID={id}>
+          {shadow(106, 0.32)}
+          <View style={[styles.sofaLeg, { left: 10, backgroundColor: woodDeep }]} />
+          <View style={[styles.sofaLeg, { right: 10, backgroundColor: woodDeep }]} />
+          <View style={[styles.sofaBack, { backgroundColor: accentDeep }]}>
+            <View
+              style={[styles.part, styles.sofaBackLit, { backgroundColor: withAlpha(accentLit, 0.26) }]}
+            />
+          </View>
+          <View style={[styles.sofaArm, { left: 0, backgroundColor: warmShade(accent, -18, 0.3) }]} />
+          <View style={[styles.sofaArm, { right: 0, backgroundColor: warmShade(accent, -18, 0.3) }]} />
+          <View style={[styles.sofaSeat, { backgroundColor: accent, borderColor: accentDeep }]}>
+            <View
+              style={[styles.part, styles.sofaCushion, { left: 14, backgroundColor: withAlpha(world.shadow, 0.15) }]}
+            />
+            <View
+              style={[styles.part, styles.sofaCushion, { left: 58, backgroundColor: withAlpha(world.shadow, 0.15) }]}
+            />
+          </View>
         </View>
       );
+
     case 'altar':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.altarTop, { backgroundColor: accent }]} />
-          <View style={styles.altarBody} />
+        <View style={wrapper} testID={id}>
+          {shadow(64, 0.3)}
+          <View style={[styles.altarStep, { backgroundColor: warmShade(trim, -14, 0.34) }]} />
+          <View style={[styles.altarBody, { backgroundColor: trim }]}>
+            <View style={[styles.altarCarve, { backgroundColor: withAlpha(world.brass, 0.32) }]} />
+            <View style={[styles.altarCarve, { backgroundColor: withAlpha(world.brass, 0.22) }]} />
+          </View>
+          <View style={[styles.altarTop, { backgroundColor: warmLight(trim, 28, 0.3), borderColor: trim }]}>
+            <View style={[styles.part, styles.altarTopLit, { backgroundColor: withAlpha(world.rim, 0.2) }]} />
+          </View>
+          <View style={[styles.part, styles.altarHalo, { backgroundColor: withAlpha(world.glow, 0.26) }]} />
+          <View style={[styles.altarBowl, { backgroundColor: world.brass, borderColor: world.brassDark }]} />
+          <View style={[styles.altarFlame, { backgroundColor: world.glowSoft }]} />
         </View>
       );
+
     case 'stage':
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.stageFloor, { backgroundColor: accent }]} />
-          <View style={[styles.stageGlow, { backgroundColor: `${accent}44` }]} />
+        <View style={wrapper} testID={id}>
+          <View style={[styles.part, styles.stageCone, { backgroundColor: withAlpha(world.glow, 0.1) }]} />
+          <View style={styles.stageLamps}>
+            <View style={[styles.stageLamp, { backgroundColor: world.brassDark }]}>
+              <View style={[styles.stageBulb, { backgroundColor: world.glowSoft }]} />
+            </View>
+            <View style={[styles.stageLamp, { backgroundColor: world.brassDark }]}>
+              <View style={[styles.stageBulb, { backgroundColor: world.glowSoft }]} />
+            </View>
+          </View>
+          <View style={[styles.stageFace, { backgroundColor: warmShade(accentDeep, -18, 0.4) }]}>
+            <View style={[styles.stageTrim, { backgroundColor: withAlpha(world.brass, 0.4) }]} />
+          </View>
+          <View
+            style={[styles.stageTop, { backgroundColor: mix(accent, world.walnut, 0.42), borderColor: accentDeep }]}
+          >
+            <View style={[styles.part, styles.stageTopLit, { backgroundColor: withAlpha(world.rim, 0.14) }]} />
+          </View>
         </View>
       );
+
     case 'stones':
     default:
       return (
-        <View style={[styles.prop, base]}>
-          <View style={[styles.stone, { backgroundColor: `${accent}55` }]} />
-          <View style={[styles.stoneSmall, { backgroundColor: `${accent}44` }]} />
+        <View style={wrapper} testID={id}>
+          {shadow(52, 0.3)}
+          <View style={[styles.rockSmall, { backgroundColor: warmLight(rockTone(trim), 12, 0.3) }]} />
+          <View
+            style={[styles.rock, { backgroundColor: warmShade(rockTone(trim), -6, 0.3), borderColor: trim }]}
+          >
+            <View style={[styles.part, styles.rockLit, { backgroundColor: withAlpha(world.rim, 0.16) }]} />
+            <View style={[styles.part, styles.moss, { backgroundColor: withAlpha(world.sage, 0.5) }]} />
+          </View>
         </View>
       );
   }
 }
 
-/** Fixed decorations: kept at module scope so the layout is identical on every
- * render (and so percentage offsets stay properly typed). */
-const STARS: { top: number; left: DimensionValue }[] = [
-  { top: 16, left: '12%' },
-  { top: 34, left: '34%' },
-  { top: 14, left: '62%' },
-  { top: 40, left: '84%' },
-  { top: 56, left: '24%' },
-];
+/** Stones in a room are the trim material, lifted toward sand so they read as rock. */
+function rockTone(trim: string): string {
+  return mix(trim, world.sand, 0.38);
+}
 
-const CLOUDS: { top: number; left: DimensionValue; width: number }[] = [
-  { top: 22, left: '8%', width: 62 },
-  { top: 44, left: '46%', width: 48 },
-  { top: 16, left: '72%', width: 38 },
-];
+/* ------------------------------------------------------------------ *
+ * Stage
+ * ------------------------------------------------------------------ */
 
 interface StageProps {
   residents: Resident[];
@@ -350,15 +1367,20 @@ export function Stage({
   const { contrast } = usePrefs();
   const [size, setSize] = useState({ width: 320, height: 300 });
 
-  const room = roomPalette[location?.type ?? ''] ?? defaultRoom;
-  const scenery = useMemo(
-    () => SCENERY[location?.type ?? ''] ?? DEFAULT_SCENERY,
-    [location?.type],
-  );
+  const type = location?.type ?? '';
+  const room = roomPalette[type] ?? defaultRoom;
+  const outdoor = OUTDOOR.has(type);
+  const scenery = useMemo(() => SCENERY[type] ?? DEFAULT_SCENERY, [type]);
+  const openings = useMemo(() => (outdoor ? [] : WINDOWS[type] ?? []), [outdoor, type]);
 
   const isNight = gameHour < 6 || gameHour >= 20;
   const isDusk = gameHour >= 17 && gameHour < 20;
   const sky = skyGradient(gameHour);
+  const ambient = ambientLight(gameHour);
+
+  const wallHeight = size.height * (outdoor ? 0.56 : 0.58);
+  const floorHeight = size.height - wallHeight;
+  const wall = useMemo(() => ({ width: size.width, height: wallHeight }), [size.width, wallHeight]);
 
   // Residents are depth-sorted so someone standing lower on the floor is drawn
   // in front of someone further back.
@@ -372,99 +1394,148 @@ export function Stage({
     setSize({ width, height });
   };
 
-  const spriteScale = Math.max(0.62, Math.min(1.05, size.width / 620));
+  const spriteScale = Math.max(0.6, Math.min(1.02, size.width / 640));
 
   return (
-    <View style={[styles.root, contrast && styles.rootContrast]} onLayout={onLayout}>
-      {/* Sky */}
-      <LinearGradient colors={sky} style={styles.sky} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} />
-
-      {/* Stars */}
-      {isNight
-        ? STARS.map((pos, index) => (
-            <View
-              key={index}
-              style={[styles.star, { top: pos.top, left: pos.left, opacity: 0.4 + (index % 3) * 0.2 }]}
-            />
-          ))
-        : null}
-
-      {/* Celestial body */}
-      <View
-        style={[
-          styles.celestial,
-          {
-            top: isNight ? 26 : isDusk ? size.height * 0.18 : 18,
-            right: isNight ? size.width * 0.62 : size.width * 0.12,
-            backgroundColor: isNight ? '#E8ECFF' : isDusk ? '#FFB56B' : '#FFF3B0',
-          },
-        ]}
-      />
-
-      {/* Clouds */}
-      {!isNight
-        ? CLOUDS.map((cloud, index) => (
-            <View
-              key={index}
-              style={[
-                styles.cloud,
-                { top: cloud.top, left: cloud.left, width: cloud.width, opacity: isDusk ? 0.28 : 0.5 },
-              ]}
-            />
-          ))
-        : null}
-
-      {/* Back wall: one flat material colour, no gradient wash. */}
-      <View style={[styles.wall, { height: size.height * 0.46, backgroundColor: room.wall[0] }]}>
-        <View style={[styles.wallAccent, { backgroundColor: room.accent }]} />
-        {[0.2, 0.42, 0.64, 0.86].map((fraction) => (
-          <View
-            key={fraction}
-            style={[styles.wallSeam, { left: `${fraction * 100}%` }]}
+    <View
+      testID="stage"
+      style={[styles.root, contrast && styles.rootContrast]}
+      onLayout={onLayout}
+    >
+      {/* Sky: the whole frame for outdoor rooms, and the view through the glass. */}
+      {outdoor ? (
+        <>
+          <LinearGradient
+            colors={sky}
+            style={[styles.sky, { height: wallHeight }]}
+            start={{ x: 0.1, y: 0 }}
+            end={{ x: 0.9, y: 1 }}
           />
-        ))}
-      </View>
-
-      {/* Floor */}
-      <View style={[styles.floor, { backgroundColor: room.floor, height: size.height * 0.56 }]}>
-        {Array.from({ length: 9 }).map((_, index) => (
+          {isNight
+            ? STARS.map((pos, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.star,
+                    {
+                      top: pos.top,
+                      left: pos.left,
+                      width: pos.size,
+                      height: pos.size,
+                      opacity: 0.45 + (index % 3) * 0.2,
+                    },
+                  ]}
+                />
+              ))
+            : null}
           <View
-            key={`v${index}`}
             style={[
-              styles.floorLineV,
-              { left: `${(index / 8) * 100}%`, opacity: 0.10 + (index % 2) * 0.05 },
+              styles.celestial,
+              {
+                top: isNight ? 22 : isDusk ? size.height * 0.16 : 16,
+                right: isNight ? size.width * 0.62 : size.width * 0.12,
+                backgroundColor: isNight ? '#E8E4D6' : isDusk ? '#E8A05C' : '#F0DDA8',
+              },
             ]}
           />
-        ))}
-        {Array.from({ length: 5 }).map((_, index) => (
           <View
-            key={`h${index}`}
             style={[
-              styles.floorLineH,
-              { top: `${(index / 4) * 100}%`, backgroundColor: room.floorAlt, opacity: 0.55 },
+              styles.celestialHalo,
+              {
+                top: isNight ? 14 : isDusk ? size.height * 0.13 : 8,
+                right: isNight ? size.width * 0.62 - 8 : size.width * 0.12 - 8,
+                backgroundColor: withAlpha(isNight ? '#E8E4D6' : world.glow, 0.3),
+              },
             ]}
           />
-        ))}
-      </View>
+          {!isNight
+            ? CLOUDS.map((cloud, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.cloud,
+                    {
+                      top: cloud.top,
+                      left: cloud.left,
+                      width: cloud.width,
+                      opacity: cloud.o * (isDusk ? 0.7 : 1),
+                    },
+                  ]}
+                >
+                  <View style={[styles.cloudTop, { backgroundColor: withAlpha(world.rim, 0.7) }]} />
+                </View>
+              ))
+            : null}
+          {!isNight && !isDusk
+            ? BIRDS.map((bird, index) => (
+                <View key={index} style={[styles.bird, { top: bird.top, left: bird.left, transform: [{ rotate: `${bird.tilt}deg` }] }]}>
+                  <View style={[styles.birdWing, { backgroundColor: withAlpha(world.shadow, 0.4) }]} />
+                  <View style={[styles.birdWing, { backgroundColor: withAlpha(world.shadow, 0.4), left: undefined, right: 0 }]} />
+                </View>
+              ))
+            : null}
+          <Horizon
+            type={type}
+            room={room}
+            width={size.width}
+            horizon={wallHeight}
+            height={size.height * 0.3}
+          />
+          <Ground kind={GROUND_OF[type] ?? 'grass'} room={room} height={floorHeight} />
+        </>
+      ) : (
+        <>
+          <Wall roomType={type} room={room} wall={wall} sky={sky} hour={gameHour} />
+          <View
+            style={[
+              styles.skirting,
+              { top: wallHeight - 7, backgroundColor: mix(room.trim, world.oak, 0.4), borderColor: withAlpha(world.rim, 0.2) },
+            ]}
+          >
+            <View style={[styles.skirtingShade, { backgroundColor: withAlpha(world.shadow, 0.3) }]} />
+          </View>
+          <PlankFloor
+            room={room}
+            floorHeight={floorHeight}
+            openings={openings}
+            wall={wall}
+            hour={gameHour}
+          />
+        </>
+      )}
 
-      {/* Scenery */}
-      <View style={[styles.scenery, { top: size.height * 0.28, height: size.height * 0.72 }]}>
+      {/* Scenery: everything stands on the boards, so the props share the
+          floor band with the residents. */}
+      <View testID="stage-scenery" style={[styles.scenery, { top: wallHeight, height: floorHeight }]}>
         {scenery.map((prop, index) => (
-          <SceneryProp key={`${prop.kind}-${index}`} prop={prop} accent={room.accent} />
+          <SceneryProp
+            key={`${prop.kind}-${index}`}
+            prop={prop}
+            accent={room.accent}
+            trim={room.trim}
+          />
         ))}
       </View>
 
       {/* Residents */}
       {sorted.map((resident, index) => {
         const depth = Math.round((resident.position?.y ?? 0.5) * 1000) + index;
+        const depthY = resident.position?.y ?? 0.5;
+        // Anchored on the shoe line: the box is lifted by its own height, minus
+        // the part of it that sits below the feet (the name tag).
+        const feet = wallHeight + floorHeight * (0.12 + depthY * 0.78);
+        const boxWidth = SPRITE_BASE_WIDTH * spriteScale;
         return (
           <View
             key={resident.id}
+            testID={`stage-resident-${resident.id}`}
             style={[
               styles.residentSlot,
               {
                 left: `${Math.min(88, Math.max(4, (resident.position?.x ?? 0.5) * 100))}%`,
-                top: `${26 + (resident.position?.y ?? 0.5) * 54}%`,
+                top: feet - (SPRITE_BASE_HEIGHT - SPRITE_GROUND_INSET) * spriteScale,
+                width: boxWidth,
+                marginLeft: -boxWidth / 2,
                 zIndex: 100 + depth,
               },
             ]}
@@ -474,6 +1545,7 @@ export function Stage({
               scale={spriteScale}
               selected={selectedResidentId === resident.id}
               walking={walkingIds.includes(resident.id)}
+              light={ambient.intensity}
               onPress={onSelectResident}
               accessibilityHint={t('common.tapToSelect')}
             />
@@ -483,7 +1555,7 @@ export function Stage({
 
       {/* Anomaly */}
       {anomalyVisible ? (
-        <View style={styles.anomalyLayer} pointerEvents="none">
+        <View style={[styles.anomalyLayer, { pointerEvents: 'none' }]}>
           {[0, 1, 2, 3, 4, 5, 6, 7].map((index) => (
             <View
               key={index}
@@ -504,7 +1576,7 @@ export function Stage({
 
       {/* Empty state */}
       {residents.length === 0 ? (
-        <View style={styles.emptyWrap} pointerEvents="none">
+        <View style={[styles.emptyWrap, { pointerEvents: 'none' }]}>
           <View style={styles.emptyCard}>
             <Ionicons name="eye-outline" size={20} color={palette.inkSoft} />
             <Text style={styles.emptyTitle}>{t('stage.nobody')}</Text>
@@ -541,6 +1613,11 @@ export function Stage({
 
         <View style={styles.statusChips}>
           <View style={styles.statusChip}>
+            <Ionicons
+              name={isNight ? 'moon' : isDusk ? 'partly-sunny' : 'sunny'}
+              size={11}
+              color={palette.inkSoft}
+            />
             <Text style={styles.statusChipText}>
               {String(gameHour).padStart(2, '0')}:00
             </Text>
@@ -558,12 +1635,20 @@ export function Stage({
         </View>
       </View>
 
-      {/* Vignette */}
+      {/* Room light over the whole frame, then the film vignette. */}
       <LinearGradient
-        colors={['rgba(8,10,13,0.55)', 'transparent', 'rgba(8,10,13,0.62)']}
+        colors={[
+          withAlpha(world.haze, 0.1 * ambient.warmth),
+          'transparent',
+          withAlpha(world.shadow, 0.24 + (1 - ambient.intensity) * 0.22),
+        ]}
         locations={[0, 0.45, 1]}
-        style={styles.vignette}
-        pointerEvents="none"
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+      />
+      <LinearGradient
+        colors={['rgba(24,12,5,0.42)', 'transparent', 'rgba(18,9,4,0.5)']}
+        locations={[0, 0.45, 1]}
+        style={[styles.vignette, { pointerEvents: 'none' }]}
       />
     </View>
   );
@@ -572,103 +1657,627 @@ export function Stage({
 const styles = StyleSheet.create({
   root: {
     width: '100%',
-    borderRadius: radius.xl,
+    borderRadius: radius.lg,
     overflow: 'hidden',
     position: 'relative',
     backgroundColor: palette.deep,
     minHeight: 300,
     aspectRatio: 1.6,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: 'rgba(0,0,0,0.5)',
   },
-  rootContrast: { borderColor: palette.borderStrong },
-
-  sky: { position: 'absolute', top: 0, left: 0, right: 0, height: '52%' },
-  star: { position: 'absolute', width: 3, height: 3, borderRadius: 2, backgroundColor: '#FFFFFF' },
+  rootContrast: { borderColor: world.brass, borderWidth: 2 },
+  sky: { position: 'absolute', top: 0, left: 0, right: 0 },
+  star: { position: 'absolute', borderRadius: 2, backgroundColor: '#F4EEDC' },
   celestial: {
     position: 'absolute',
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    shadowColor: '#FFE9A8',
-    shadowOpacity: 0.65,
-    shadowRadius: 22,
-    elevation: 4,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    boxShadow: '0 0 22px rgba(255, 233, 168, 0.7)',
+    elevation: 3,
   },
-  cloud: { position: 'absolute', height: 13, borderRadius: 10, backgroundColor: '#FFFFFF' },
+  celestialHalo: {
+    position: 'absolute',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+  },
+  cloud: {
+    position: 'absolute',
+    height: 14,
+    borderRadius: 8,
+    backgroundColor: withAlpha('#F6EBD8', 0.55),
+    overflow: 'hidden',
+  },
+  cloudTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 4 },
+  bird: { position: 'absolute', width: 12, height: 6 },
+  birdWing: { position: 'absolute', top: 2, left: 0, width: 6, height: 2 },
 
-  wall: { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0.94 },
-  wallAccent: { position: 'absolute', top: 0, left: 0, right: 0, height: 3, opacity: 0.55 },
-  wallSeam: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: 'rgba(0,0,0,0.16)' },
+  horizon: { position: 'absolute', left: 0, right: 0 },
+  seaBand: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '70%' },
+  seaLine: { position: 'absolute', top: '30%', left: 0, right: 0, height: 1.5, opacity: 0.6 },
+  ridge: { position: 'absolute', bottom: 0 },
+  ridgeCap: { position: 'absolute', bottom: '34%', width: 26, height: 6, opacity: 0.5 },
+  block: { position: 'absolute', bottom: 0, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+  blockRoof: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
 
-  floor: { position: 'absolute', bottom: 0, left: 0, right: 0, overflow: 'hidden' },
-  floorLineV: { position: 'absolute', top: 0, bottom: 0, width: 1, backgroundColor: '#000000' },
-  floorLineH: { position: 'absolute', left: 0, right: 0, height: 1.4 },
+  /* Wall */
+  wall: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
+  plasterField: { ...StyleSheet.absoluteFillObject },
+  plasterPatch: { position: 'absolute', borderRadius: 26 },
+  ceiling: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
+  cornice: { position: 'absolute', top: '9.6%', left: 0, right: 0, height: 5, opacity: 0.9 },
+  corniceShade: { position: 'absolute', top: '11%', left: 0, right: 0, height: 2 },
+  windowBox: { position: 'absolute' },
+  windowFrame: {
+    flex: 1,
+    borderWidth: 4,
+    borderRadius: radius.xs,
+    overflow: 'hidden',
+    padding: 3,
+  },
+  windowGlass: { flex: 1, overflow: 'hidden' },
+  windowLights: { ...StyleSheet.absoluteFillObject },
+  cityLight: { position: 'absolute', width: 4, height: 4 },
+  windowBloom: { position: 'absolute', left: 0, right: 0, top: '55%', bottom: 0 },
+  mullion: { position: 'absolute', top: 0, bottom: 0, width: 3, opacity: 0.9 },
+  transom: { position: 'absolute', left: 4, height: 3, opacity: 0.9 },
+  glassSheen: { position: 'absolute', top: 8, left: 10, width: 26, height: 60, transform: [{ rotate: '18deg' }] },
+  windowSill: { position: 'absolute', left: -6, right: -6, bottom: -6, height: 6, borderRadius: radius.xs },
+  windowSillShade: { position: 'absolute', top: 4, left: 0, right: 0, height: 2 },
+  spill: { position: 'absolute' },
+  wainscot: { position: 'absolute', left: 0, right: 0, bottom: 0, borderTopWidth: 2, borderBottomWidth: 1, overflow: 'hidden' },
+  wainscotPanel: {
+    position: 'absolute',
+    top: 6,
+    bottom: 6,
+    width: '9%',
+    borderWidth: 1,
+    borderRadius: radius.xs,
+  },
+  wainscotGrain: { position: 'absolute', top: '30%', left: 0, right: 0, height: 1 },
+  sconce: { position: 'absolute', width: 18, alignItems: 'center' },
+  sconceGlow: { position: 'absolute', top: 10, width: 34, height: 34, borderRadius: 17 },
+  sconceArm: { width: 3, height: 12 },
+  sconceShade: { width: 16, height: 10, borderBottomLeftRadius: 6, borderBottomRightRadius: 6, alignItems: 'center' },
+  sconceBulb: { width: 5, height: 5, marginTop: 4, borderRadius: 2 },
+
+  /* Floors */
+  floor: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  floorRow: { position: 'absolute', left: 0, right: 0 },
+  plank: { position: 'absolute', top: 0, bottom: 0, borderBottomWidth: 1, overflow: 'hidden' },
+  plankGrain: { position: 'absolute', top: '38%', left: 3, height: 1 },
+  plankTop: { position: 'absolute', top: 0, left: 0, right: 0, height: 1 },
+  lightPool: { position: 'absolute', top: 0, overflow: 'hidden' },
+  tuft: { position: 'absolute', width: 2 },
+  ripple: { position: 'absolute', height: 1.5 },
+  slab: { position: 'absolute', borderWidth: 1, overflow: 'hidden' },
+  slabLit: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
+  groundEdge: { position: 'absolute', top: 0, left: 0, right: 0, height: 3 },
+
+  skirting: { position: 'absolute', left: 0, right: 0, height: 7, borderTopWidth: 1 },
+  skirtingShade: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 3 },
 
   scenery: { position: 'absolute', left: 0, right: 0 },
-  prop: {},
 
-  counterTop: { width: 72, height: 9, borderRadius: 3, opacity: 0.92 },
-  counterBody: { width: 72, height: 22, backgroundColor: 'rgba(0,0,0,0.32)', borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
-  tableTop: { width: 44, height: 7, borderRadius: 4, opacity: 0.92 },
-  tableLeg: { width: 5, height: 16, backgroundColor: 'rgba(0,0,0,0.34)', marginLeft: 19 },
-  deskTop: { width: 52, height: 7, borderRadius: 3, opacity: 0.9 },
-  deskLeg: { width: 52, height: 18, backgroundColor: 'rgba(0,0,0,0.28)', borderRadius: 2 },
-  benchSeat: { width: 46, height: 7, borderRadius: 3, opacity: 0.9 },
-  benchBack: { width: 46, height: 4, backgroundColor: 'rgba(0,0,0,0.30)', marginTop: 3, borderRadius: 2 },
-  machineBody: { width: 26, height: 36, borderRadius: 5, borderWidth: 2, backgroundColor: 'rgba(10,12,26,0.75)', alignItems: 'flex-end', padding: 4 },
-  machineLight: { width: 6, height: 6, borderRadius: 3 },
-  screen: { width: 58, height: 34, borderRadius: 4, borderWidth: 2, backgroundColor: 'rgba(12,15,19,0.88)', overflow: 'hidden' },
+  /* Props: every part is placed from the ground line, so stacks stay upright. */
+  part: { position: 'absolute' },
+  contact: { position: 'absolute', bottom: -1, height: 7, borderRadius: 10 },
+
+  counterBody: {
+    position: 'absolute',
+    left: 6,
+    right: 6,
+    bottom: 0,
+    height: 46,
+    borderWidth: 1,
+    borderRadius: 3,
+    paddingHorizontal: 6,
+    paddingTop: 10,
+    paddingBottom: 10,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  counterPanel: { flex: 1, borderWidth: 1, borderRadius: 2 },
+  counterRail: { position: 'absolute', left: 0, right: 0, bottom: 5, height: 4, borderRadius: 2 },
+  counterRailLit: { position: 'absolute', top: 0, left: 0, right: 0, height: 1 },
+  counterTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 46,
+    height: 11,
+    borderWidth: 1,
+    borderRadius: 2,
+  },
+  counterTopLit: { position: 'absolute', top: 1, left: 2, right: 2, height: 2 },
+  counterItems: {
+    position: 'absolute',
+    left: 16,
+    bottom: 57,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-end',
+  },
+  cup: { width: 11, height: 12, borderWidth: 1, borderRadius: 1, alignItems: 'center' },
+  cupRim: { top: 1, left: 2, width: 5, height: 2 },
+  jar: { width: 14, height: 17, borderWidth: 1, borderRadius: 2, alignItems: 'center' },
+  jarNeck: { top: -3, left: 3, width: 8, height: 3 },
+
+  tableFoot: { position: 'absolute', left: 15, bottom: 0, width: 36, height: 5, borderRadius: 2 },
+  tableColumn: { position: 'absolute', left: 28, bottom: 5, width: 10, height: 22 },
+  tableColumnLit: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 2 },
+  tableApron: { position: 'absolute', left: 8, right: 8, bottom: 27, height: 6, borderRadius: 2 },
+  tableApronLit: { position: 'absolute', top: 0, left: 0, right: 0, height: 1 },
+  tableTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 33,
+    height: 9,
+    borderWidth: 1,
+    borderRadius: 4,
+  },
+  tableTopLit: { position: 'absolute', top: 1, left: 2, right: 2, height: 2 },
+
+  deskBody: {
+    position: 'absolute',
+    left: 7,
+    right: 7,
+    bottom: 0,
+    height: 36,
+    borderWidth: 1,
+    borderRadius: 3,
+    padding: 5,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  deskDrawer: { flex: 1, borderWidth: 1, borderRadius: 2, alignItems: 'center', justifyContent: 'center' },
+  deskHandle: { width: 10, height: 2 },
+  deskTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 36,
+    height: 10,
+    borderWidth: 1,
+    borderRadius: 2,
+  },
+  deskTopLit: { position: 'absolute', top: 1, left: 1, right: 1, height: 2 },
+  deskItems: {
+    position: 'absolute',
+    left: 16,
+    bottom: 46,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  deskLamp: { alignItems: 'center' },
+  lampStem: { width: 3, height: 13 },
+  lampHead: {
+    width: 20,
+    height: 9,
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  deskBulb: { width: 6, height: 4, borderRadius: 2, marginBottom: 1 },
+  papers: {
+    width: 25,
+    height: 5,
+    borderWidth: 1,
+    borderRadius: 1,
+    paddingHorizontal: 3,
+    justifyContent: 'center',
+  },
+  paperLine: { left: 3, width: 18, height: 1 },
+
+  benchLeg: { position: 'absolute', bottom: 0, width: 5, height: 16, borderRadius: 1 },
+  benchSeat: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 16,
+    height: 10,
+    borderWidth: 1,
+    borderRadius: 2,
+  },
+  benchSeam: { position: 'absolute', top: 0, bottom: 0, width: 1 },
+  benchBack: {
+    position: 'absolute',
+    left: 5,
+    right: 5,
+    bottom: 26,
+    height: 16,
+    justifyContent: 'space-evenly',
+    paddingHorizontal: 8,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
+  benchBar: { height: 3, borderRadius: 1 },
+
+  machineBase: { position: 'absolute', left: 1, right: 1, bottom: 0, height: 6, borderRadius: 2 },
+  machineBody: {
+    position: 'absolute',
+    left: 3,
+    right: 3,
+    bottom: 6,
+    height: 58,
+    borderWidth: 2,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 7,
+  },
+  machinePanel: {
+    width: 30,
+    height: 20,
+    borderWidth: 1,
+    borderRadius: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+  },
+  machineDial: { width: 7, height: 7, borderWidth: 1, borderRadius: 4 },
+  machineLight: { width: 8, height: 8, borderRadius: 4 },
+  machineHalo: { top: -5, left: -5, width: 16, height: 16, borderRadius: 8 },
+
+  screenBase: { position: 'absolute', left: 29, bottom: 0, width: 34, height: 5, borderRadius: 2 },
+  screenStand: { position: 'absolute', left: 41, bottom: 5, width: 10, height: 8 },
+  screenFrame: {
+    position: 'absolute',
+    left: 2,
+    right: 2,
+    bottom: 13,
+    height: 48,
+    borderWidth: 3,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
   screenGlow: { flex: 1 },
-  screenStand: { width: 12, height: 6, backgroundColor: 'rgba(0,0,0,0.4)', marginLeft: 23, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
-  shelf: { width: 34, height: 44, borderRadius: 4, borderWidth: 2, backgroundColor: 'rgba(0,0,0,0.28)', padding: 3, flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
-  shelfBook: { width: 7, height: 20, borderRadius: 1, opacity: 0.9 },
-  mat: { width: 64, height: 26, borderRadius: 6 },
-  leaf: { width: 26, height: 20, borderRadius: 14, opacity: 0.85 },
-  leafAlt: { width: 18, height: 16, borderRadius: 12, opacity: 0.7, marginTop: -8, marginLeft: 12 },
-  pot: { width: 20, height: 12, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.38)', marginTop: -4, marginLeft: 3 },
-  canopy: { width: 48, height: 42, borderRadius: 24, opacity: 0.9 },
-  canopyAlt: { width: 30, height: 26, borderRadius: 16, opacity: 0.75, marginTop: -32, marginLeft: 26 },
-  trunk: { width: 8, height: 22, backgroundColor: 'rgba(0,0,0,0.4)', marginTop: -6, marginLeft: 20, borderRadius: 3 },
-  lampGlow: { width: 40, height: 40, borderRadius: 20 },
-  lampBulb: { position: 'absolute', top: 14, left: 16, width: 9, height: 12, borderRadius: 5 },
-  water: { width: 220, height: 34, borderRadius: 16 },
-  bedBody: { width: 74, height: 30, borderRadius: 6, opacity: 0.92 },
-  bedPillow: { position: 'absolute', top: 4, left: 6, width: 20, height: 13, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.72)' },
-  sofaBody: { width: 62, height: 26, borderRadius: 8, opacity: 0.92 },
-  sofaArm: { position: 'absolute', right: 0, top: -8, width: 12, height: 20, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.24)' },
-  altarTop: { width: 44, height: 8, borderRadius: 3, opacity: 0.95 },
-  altarBody: { width: 34, height: 26, backgroundColor: 'rgba(0,0,0,0.32)', marginLeft: 5, borderRadius: 3 },
-  stageFloor: { width: 110, height: 18, borderRadius: 9, opacity: 0.85 },
-  stageGlow: { position: 'absolute', top: -32, left: 6, width: 98, height: 34, borderRadius: 18 },
-  stone: { width: 30, height: 15, borderRadius: 10, opacity: 0.8 },
-  stoneSmall: { width: 18, height: 10, borderRadius: 6, opacity: 0.7, marginTop: -3, marginLeft: 26 },
+  screenLine: { position: 'absolute', top: '30%', left: '8%', width: '68%', height: 2 },
+  screenSheen: {
+    top: 6,
+    left: 10,
+    width: 22,
+    height: 34,
+    transform: [{ rotate: '14deg' }],
+  },
 
-  residentSlot: { position: 'absolute', alignItems: 'center', marginLeft: -46 },
+  shelf: {
+    position: 'absolute',
+    left: 2,
+    right: 2,
+    bottom: 0,
+    height: 88,
+    borderWidth: 2,
+    borderRadius: 3,
+    padding: 4,
+    justifyContent: 'space-between',
+  },
+  shelfBay: { height: 24, borderBottomWidth: 2, justifyContent: 'flex-end' },
+  shelfBooks: { flexDirection: 'row', gap: 2, alignItems: 'flex-end' },
+  shelfBook: { width: 7, borderRadius: 1 },
+  shelfBasket: { width: 34, height: 18, borderRadius: 2, padding: 3 },
+  basketWeave: { flex: 1, borderRadius: 1 },
 
+  mat: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 30,
+    borderWidth: 1,
+    borderRadius: 3,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matBorder: { top: 3, left: 3, right: 3, bottom: 3, borderWidth: 1, borderRadius: 2 },
+  matWeave: { top: '36%', left: 0, right: 0, height: 1 },
+
+  stem: { position: 'absolute', left: 22, bottom: 14, width: 3, height: 14, borderRadius: 1 },
+  pot: { position: 'absolute', left: 11, bottom: 0, width: 26, height: 16, borderWidth: 1, borderRadius: 3 },
+  potRim: { left: -1, bottom: 12, width: 28, height: 5, borderRadius: 2 },
+  leaf: {
+    position: 'absolute',
+    left: 10,
+    bottom: 22,
+    width: 28,
+    height: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 7,
+    borderBottomRightRadius: 7,
+  },
+  leafAlt: {
+    position: 'absolute',
+    left: 24,
+    bottom: 30,
+    width: 20,
+    height: 17,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+  },
+  leafSide: {
+    position: 'absolute',
+    left: 2,
+    bottom: 26,
+    width: 16,
+    height: 17,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
+  },
+
+  trunk: { position: 'absolute', left: 46, bottom: 0, width: 12, height: 44, borderRadius: 3 },
+  bark: { top: 6, left: 3, width: 1.5, bottom: 6 },
+  canopy: { position: 'absolute', left: 10, bottom: 28, width: 84, height: 62, borderRadius: 34 },
+  canopyMid: { position: 'absolute', left: 4, bottom: 46, width: 64, height: 48, borderRadius: 30 },
+  canopyLit: { position: 'absolute', left: 44, bottom: 66, width: 42, height: 32, borderRadius: 22 },
+
+  lampPool: { left: -10, bottom: -6, width: 64, height: 16, borderRadius: 10 },
+  lampHalo: { left: -2, bottom: 36, width: 48, height: 48, borderRadius: 24 },
+  lampBase: { position: 'absolute', left: 9, bottom: 0, width: 26, height: 6, borderRadius: 2 },
+  lampPole: { position: 'absolute', left: 20, bottom: 6, width: 4, height: 58, borderRadius: 1 },
+  lampGlass: { position: 'absolute', left: 18, bottom: 58, width: 8, height: 8, borderRadius: 4 },
+  lampShade: {
+    position: 'absolute',
+    left: 3,
+    bottom: 66,
+    width: 38,
+    height: 20,
+    borderWidth: 1,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
+  },
+  lampShadeLit: { top: 2, left: 4, right: 4, height: 5, borderRadius: 3 },
+
+  water: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 6,
+    height: 40,
+    borderWidth: 1,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  waterLine: { top: '26%', left: '6%', width: '62%', height: 2, borderRadius: 1 },
+  wetSand: { left: 11, bottom: -2, width: 168, height: 8, borderRadius: 4 },
+
+  bedLeg: { position: 'absolute', bottom: 0, width: 7, height: 12, borderRadius: 1 },
+  bedHead: {
+    position: 'absolute',
+    left: 3,
+    bottom: 26,
+    width: 104,
+    height: 34,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    paddingHorizontal: 8,
+    paddingTop: 6,
+  },
+  bedSlat: { width: 9, height: 18, borderRadius: 2 },
+  bedFrame: { position: 'absolute', left: 0, right: 0, bottom: 10, height: 6, borderRadius: 2 },
+  bedMattress: {
+    position: 'absolute',
+    left: 3,
+    right: 3,
+    bottom: 14,
+    height: 24,
+    borderWidth: 1,
+    borderRadius: 3,
+  },
+  bedSheet: { top: 3, left: 4, right: 40, height: 5, borderRadius: 2 },
+  bedPillow: { position: 'absolute', bottom: 34, width: 30, height: 12, borderRadius: 5 },
+  bedThrow: {
+    position: 'absolute',
+    left: 46,
+    bottom: 15,
+    width: 62,
+    height: 22,
+    borderWidth: 1,
+    borderRadius: 3,
+  },
+  bedFold: { top: 7, left: 0, right: 0, height: 2 },
+
+  sofaLeg: { position: 'absolute', bottom: 0, width: 8, height: 10, borderRadius: 1 },
+  sofaBack: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    bottom: 26,
+    height: 34,
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 7,
+  },
+  sofaBackLit: { top: 3, left: 8, right: 8, height: 4, borderRadius: 3 },
+  sofaArm: { position: 'absolute', bottom: 10, width: 14, height: 30, borderRadius: 4 },
+  sofaSeat: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    bottom: 10,
+    height: 22,
+    borderWidth: 1,
+    borderRadius: 4,
+  },
+  sofaCushion: { top: 4, width: 42, height: 12, borderRadius: 3 },
+
+  altarStep: { position: 'absolute', left: 2, right: 2, bottom: 0, height: 8, borderRadius: 2 },
+  altarBody: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    bottom: 8,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'space-evenly',
+  },
+  altarCarve: { width: 34, height: 3, borderRadius: 2 },
+  altarTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 44,
+    height: 11,
+    borderWidth: 1,
+    borderRadius: 2,
+  },
+  altarTopLit: { top: 1, left: 2, right: 2, height: 2 },
+  altarHalo: { left: 20, bottom: 58, width: 34, height: 34, borderRadius: 17 },
+  altarBowl: {
+    position: 'absolute',
+    left: 26,
+    bottom: 55,
+    width: 22,
+    height: 10,
+    borderWidth: 1,
+    borderRadius: 4,
+  },
+  altarFlame: { position: 'absolute', left: 34, bottom: 65, width: 6, height: 9, borderRadius: 3 },
+
+  stageCone: {
+    left: 40,
+    bottom: 44,
+    width: 120,
+    height: 56,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12,
+    borderBottomLeftRadius: 60,
+    borderBottomRightRadius: 60,
+  },
+  stageFace: {
+    position: 'absolute',
+    left: 7,
+    right: 7,
+    bottom: 0,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stageTrim: { width: 150, height: 2, borderRadius: 1 },
+  stageTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 24,
+    height: 12,
+    borderWidth: 1,
+    borderRadius: 3,
+  },
+  stageTopLit: { top: 2, left: 4, right: 4, height: 2 },
+  stageLamps: {
+    position: 'absolute',
+    left: 30,
+    right: 30,
+    bottom: 36,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  stageLamp: { width: 4, height: 22, borderRadius: 2, alignItems: 'center' },
+  stageBulb: { width: 7, height: 7, borderRadius: 4 },
+
+  rock: {
+    position: 'absolute',
+    left: 0,
+    bottom: 0,
+    width: 46,
+    height: 28,
+    borderWidth: 1,
+    borderRadius: 9,
+    overflow: 'hidden',
+  },
+  rockLit: { top: 2, left: 4, right: 8, height: 3, borderRadius: 2 },
+  moss: { bottom: 3, left: 7, width: 13, height: 4, borderRadius: 2 },
+  rockSmall: { position: 'absolute', left: 34, bottom: 0, width: 26, height: 18, borderRadius: 6 },
+
+  /* Overlays */
+  residentSlot: { position: 'absolute', alignItems: 'center' },
   anomalyLayer: { ...StyleSheet.absoluteFillObject },
-  anomalyLine: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: '#FF5FA2' },
-  anomalyTag: { position: 'absolute', bottom: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(14,10,11,0.82)', borderWidth: 1, borderColor: 'rgba(201,154,69,0.6)', borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 6, maxWidth: '72%' },
-
+  anomalyLine: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: palette.rose },
+  anomalyTag: {
+    position: 'absolute',
+    top: space.md,
+    left: space.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingVertical: space.sm,
+    paddingHorizontal: space.md,
+    borderRadius: radius.xs,
+    backgroundColor: 'rgba(12,10,8,0.88)',
+    borderWidth: 1,
+    borderColor: palette.rose,
+    maxWidth: 260,
+  },
   anomalyTextWrap: { flexShrink: 1 },
-  anomalyName: { ...typeTokens.micro, color: '#FF9EC4', letterSpacing: 1.2 },
-  anomalyText: { ...typeTokens.caption, color: palette.inkSoft },
-
+  anomalyName: { ...typeTokens.micro, color: palette.rose },
+  anomalyText: { ...typeTokens.caption, color: palette.ink, marginTop: 2 },
   emptyWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  emptyCard: { alignItems: 'center', gap: 4, backgroundColor: 'rgba(9,11,15,0.7)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.lg, paddingHorizontal: space.lg, paddingVertical: space.md, maxWidth: 300 },
-  emptyTitle: { ...type.title, color: palette.ink, fontSize: 14 },
-  emptyHint: { ...type.caption, color: palette.inkMuted, textAlign: 'center' },
-
-  topBar: { position: 'absolute', top: 10, left: 10, right: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
-  placeChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(9,11,15,0.74)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 7, maxWidth: '60%' },
-
+  emptyCard: {
+    alignItems: 'center',
+    gap: space.xs,
+    paddingVertical: space.md,
+    paddingHorizontal: space.lg,
+    borderRadius: radius.xs,
+    backgroundColor: 'rgba(12,10,8,0.82)',
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  emptyTitle: { ...typeTokens.label, color: palette.ink },
+  emptyHint: { ...typeTokens.caption, color: palette.inkMuted },
+  topBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    padding: space.sm,
+    gap: space.sm,
+  },
+  placeChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingVertical: space.xs + 2,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.xs,
+    backgroundColor: 'rgba(12,10,8,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,162,74,0.36)',
+    maxWidth: 220,
+  },
   placeText: { flexShrink: 1 },
-  placeName: { ...type.label, color: palette.ink },
-  placeCity: { ...type.micro, color: palette.inkMuted, fontWeight: '500', letterSpacing: 0 },
-  statusChips: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
-  statusChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(9,11,15,0.74)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.xs, paddingHorizontal: 8, paddingVertical: 4 },
-  statusChipText: { ...type.micro, color: palette.inkSoft, letterSpacing: 0.3 },
-
+  placeName: { ...typeTokens.label, color: palette.ink },
+  placeCity: { ...typeTokens.caption, color: palette.inkMuted, fontSize: 10 },
+  statusChips: { flexDirection: 'row', gap: space.xs, flexWrap: 'wrap', justifyContent: 'flex-end' },
+  statusChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 3,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.xs,
+    backgroundColor: 'rgba(12,10,8,0.78)',
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  statusChipText: { ...typeTokens.caption, color: palette.inkSoft, fontSize: 10 },
   vignette: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
 });
 
