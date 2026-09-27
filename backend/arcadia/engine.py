@@ -12,6 +12,7 @@ same world back, and the test-suite can assert on real behaviour instead of
 
 from __future__ import annotations
 
+import hashlib
 import random
 import uuid
 from datetime import datetime, timezone
@@ -109,6 +110,16 @@ SIGNATURES: Dict[str, Dict[str, Any]] = {
 
 def clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
     return max(low, min(high, value))
+
+
+def _stable_digest(*parts: Any) -> str:
+    """Short, process-independent id fragment.
+
+    ``hash()`` cannot be used for anything persisted: it is salted per process,
+    so the same event would get a different id every run.
+    """
+    raw = "|".join(str(part) for part in parts).encode("utf-8")
+    return hashlib.sha1(raw).hexdigest()[:10]
 
 
 def _now() -> str:
@@ -270,12 +281,21 @@ def make_custom_resident(data: Dict[str, Any], user_id: Optional[str] = None) ->
 
 
 def new_state(locations: Iterable[Dict[str, Any]]) -> Dict[str, Any]:
-    """Build a fresh iteration."""
-    location_ids = {loc.get("id") for loc in locations}
+    """Build a fresh iteration.
+
+    Deterministic on purpose: the same catalogue must always produce the same
+    starting world, in any process. That rules out picking a fallback home from
+    set iteration order, which varies with the interpreter's hash seed.
+    """
+    ordered_ids = sorted(
+        {str(loc.get("id")) for loc in locations if loc.get("id") is not None}
+    )
+    location_ids = set(ordered_ids)
+    fallback_home = ordered_ids[0] if ordered_ids else None
     residents = [_resident_from_content(spec) for spec in C.RESIDENTS]
     for resident in residents:
         if resident["home"] not in location_ids:
-            resident["location_id"] = next(iter(location_ids), resident["home"])
+            resident["location_id"] = fallback_home or resident["home"]
 
     # Seed the social fabric so the world is not six strangers on turn one.
     relationships: Dict[str, Dict[str, Any]] = {}
@@ -1027,8 +1047,9 @@ def advance_cycle(
                 "location_id": resident["location_id"],
                 "reason": _reasons_to_text(decision["reasons"]),
                 "needs_delta": {
+                    # Sorted so two identical runs produce byte-identical reports.
                     key: round(float(decayed.get(key, 0)) + float(relieved.get(key, 0)), 2)
-                    for key in set(decayed) | set(relieved)
+                    for key in sorted(set(decayed) | set(relieved))
                 },
                 "goal_progress": _goal_snapshot(resident),
                 "money_delta": money_delta,
@@ -1197,7 +1218,12 @@ def advance_cycle(
         _unlock_signature(state, "residue")
 
     # 8. Stability bookkeeping.
+    # A comfortable world mends itself, a shaky one slides: the recovery a
+    # healthy group of residents provides shrinks with the world's own health, so
+    # an iteration that is already falling apart keeps falling instead of being
+    # rescued by a bonus nobody earned.
     stability = float(state.get("stability", START_STABILITY))
+    stability_before_bookkeeping = stability
     stability += STABILITY_DRIFT
     lucidity_now = global_lucidity(state)
     if lucidity_now > 45:
@@ -1207,7 +1233,8 @@ def advance_cycle(
     ]
     stability -= len(starving) * 1.1
     if not starving:
-        stability += 1.4
+        health = clamp((stability_before_bookkeeping - 20.0) / 40.0, 0.0, 1.0)
+        stability += 1.4 * health
     weather = _weather_for(state, rng)
     stability += weather["stability"]
     state["stability"] = round(clamp(stability), 2)
@@ -1285,7 +1312,9 @@ def _chronicle_entry(
     location_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     return {
-        "id": f"chr_{cycle}_{kind}_{abs(hash((cycle, kind, text.get('en', '')))) % 10**8}",
+        # A stable digest, not hash(): Python randomises string hashes per process,
+        # and two identical runs must produce identical ids.
+        "id": f"chr_{cycle}_{kind}_{_stable_digest(text.get('en', ''), text.get('fr', ''))}",
         "cycle": cycle,
         "kind": kind,
         "icon": icon,

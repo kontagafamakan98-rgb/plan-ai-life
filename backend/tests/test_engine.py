@@ -497,11 +497,30 @@ class TestAnomalyAndEndings:
         assert state["anomaly_visible"] is True
         assert any(entry["kind"] == "anomaly" for entry in report["chronicle"])
 
-    def test_drift_ending_when_stability_reaches_zero(self, state):
+    def test_a_world_at_the_brink_keeps_falling(self, state):
+        """A collapsing iteration must not be rescued by an unearned bonus."""
         state["stability"] = 1.0
         state, report = engine.advance_cycle(state, base_locations())
+        assert state["stability"] < 1.0, "a dying world cannot heal faster than it drifts"
         assert report["ending"]["id"] == "drift"
         assert state["ending"]["id"] == "drift"
+
+    def test_starvation_forces_the_world_down(self, state):
+        state["stability"] = 40.0
+        for resident in state["residents"]:
+            for key in engine.NEED_KEYS:
+                resident["needs"][key] = 4.0
+        state, report = engine.advance_cycle(state, base_locations())
+        assert state["stability"] < 40.0
+        assert report["world"]["stability_delta"] < 0
+
+    def test_a_healthy_world_still_recovers(self, state):
+        state["stability"] = 60.0
+        for resident in state["residents"]:
+            for key in engine.NEED_KEYS:
+                resident["needs"][key] = 96.0
+        state, _ = engine.advance_cycle(state, base_locations())
+        assert state["stability"] > 60.0
 
     def test_no_further_cycles_after_ending(self, state):
         state["stability"] = 1.0
