@@ -443,7 +443,7 @@ function HairBack({ build, colours, id, style: hairStyle }: PartProps & { id: (p
     const { headHalf, eyeY, headTop, headTall } = build;
     return (
       <>
-        <Path d={backMass(build, drop)} fill={fill} />
+        <Path d={backMass(build, drop)} fill={fill} stroke={colours.contour} strokeWidth={0.9} />
         <Path
           d={limbOutline([
             { x: CX + headHalf * 0.9, y: headTop + headTall * 0.6, w: 7 * H },
@@ -460,7 +460,7 @@ function HairBack({ build, colours, id, style: hairStyle }: PartProps & { id: (p
     const { headHalf, eyeY } = build;
     return (
       <>
-        <Path d={backMass(build, drop)} fill={fill} />
+        <Path d={backMass(build, drop)} fill={fill} stroke={colours.contour} strokeWidth={0.9} />
         {[-1, 1].map((side) => (
           <Path
             key={side}
@@ -475,7 +475,7 @@ function HairBack({ build, colours, id, style: hairStyle }: PartProps & { id: (p
       </>
     );
   }
-  return <Path d={backMass(build, drop)} fill={fill} />;
+  return <Path d={backMass(build, drop)} fill={fill} stroke={colours.contour} strokeWidth={0.9} />;
 }
 
 function HairFront({ build, colours, id, style: hairStyle }: PartProps & { id: (part: string) => string; style: string }) {
@@ -835,7 +835,7 @@ function Arm({
 
   return (
     <>
-      <Path d={sleeve} fill={`url(#${id('cloth')})`} stroke={colours.clothDeep} strokeWidth={0.8} />
+      <Path d={sleeve} fill={`url(#${id('cloth')})`} stroke={colours.contour} strokeWidth={1} />
       {/* Light down the outside of the sleeve, shade down the inside. */}
       <Path
         d={smoothOpen([
@@ -859,7 +859,7 @@ function Arm({
         strokeWidth={1.7}
         fill="none"
       />
-      <Path d={hand} fill={`url(#${id('skin')})`} stroke={withAlpha(colours.skinShade, 0.85)} strokeWidth={0.7} />
+      <Path d={hand} fill={`url(#${id('skin')})`} stroke={colours.contour} strokeWidth={0.7} />
       <Ellipse cx={wrist.x - side * build.wrist * 0.3} cy={wrist.y + 2.6} rx={1.7} ry={2.8} fill={colours.skin} stroke={withAlpha(colours.skinShade, 0.5)} strokeWidth={0.5} />
       <Path
         d={smoothOpen([
@@ -898,7 +898,7 @@ function Leg({ build, colours, id, side }: PartProps & { id: (part: string) => s
 
   return (
     <>
-      <Path d={leg} fill={`url(#${id('leg')})`} stroke={colours.trouserDeep} strokeWidth={0.8} />
+      <Path d={leg} fill={`url(#${id('leg')})`} stroke={colours.contour} strokeWidth={1} />
       <Path
         d={smoothOpen([
           { x: hipX + side * thigh * 0.34, y: hipY + 2 },
@@ -947,7 +947,7 @@ function Shoe({ build, colours, side }: PartProps & { side: 1 | -1 }) {
 
   return (
     <>
-      <Path d={foot} fill={colours.shoe} stroke={withAlpha(colours.shoe, 0.9)} strokeWidth={0.7} />
+      <Path d={foot} fill={colours.shoe} stroke={colours.contour} strokeWidth={0.8} />
       <Path
         d={smoothOpen([
           { x: cx - side * (ankle * 0.5 + 1.8), y: ankleY + 7.6 },
@@ -1007,7 +1007,7 @@ function Torso({
   return (
     <>
       {/* The cloth drops from the shoulders and keeps its own weight. */}
-      <Path d={body} fill={`url(#${id('cloth')})`} stroke={colours.clothDeep} strokeWidth={0.85} />
+      <Path d={body} fill={`url(#${id('cloth')})`} stroke={colours.contour} strokeWidth={1} />
 
       {/* Tension folds from under each arm to the waist. */}
       {[-1, 1].map((side) => (
@@ -1435,7 +1435,7 @@ export function Figure({ resident, light = 0.85, withEyes = true, width, height,
           <Arm key={`arm${side}`} build={build} colours={colours} id={id} cut={cut} side={side} />
         ))}
 
-        <Path d={neck} fill={`url(#${id('skin')})`} stroke={withAlpha(colours.skinShade, 0.85)} strokeWidth={0.7} />
+        <Path d={neck} fill={`url(#${id('skin')})`} stroke={colours.contour} strokeWidth={0.8} />
         <Ellipse cx={CX} cy={chin + 3} rx={headHalf * 0.7} ry={2.8} fill={withAlpha(colours.skinDeep, 0.4)} />
 
         <G transform={`rotate(${build.headTilt} ${CX} ${chin})`}>
@@ -1465,7 +1465,7 @@ export function Figure({ resident, light = 0.85, withEyes = true, width, height,
             />
           ))}
 
-          <Path d={skull} fill={`url(#${id('skin')})`} stroke={withAlpha(colours.skinShade, 0.9)} strokeWidth={0.8} />
+          <Path d={skull} fill={`url(#${id('skin')})`} stroke={colours.contour} strokeWidth={0.9} />
 
           {withEyes ? <Eyes build={build} colours={colours} id={id} lid={mood.lid} open={mood.eyeOpen} /> : null}
           <Face build={build} colours={colours} id={id} mood={mood} />
