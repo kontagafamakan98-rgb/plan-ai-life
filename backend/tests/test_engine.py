@@ -655,3 +655,51 @@ class TestPublicState:
         preview = engine.location_action_preview(base_locations()[0])
         assert preview
         assert all(item["label"]["fr"] for item in preview)
+
+# --------------------------------------------------------------------------- #
+# Content updates reaching an existing save
+# --------------------------------------------------------------------------- #
+class TestRefreshContent:
+    """A correction to the art direction must show up in a running game."""
+
+    def test_wardrobe_follows_the_content_file(self, state):
+        state["residents"][0]["look"]["outfit"]["top"] = "#123456"
+        state["residents"][0]["bio"] = "ancien texte"
+        refreshed = engine.refresh_content(state)
+        assert state["residents"][0]["id"] in refreshed
+        spec = next(r for r in C.RESIDENTS if r["id"] == state["residents"][0]["id"])
+        assert state["residents"][0]["look"]["outfit"]["top"] == spec["look"]["outfit"]["top"]
+        assert state["residents"][0]["bio"] == spec["bio"]
+
+    def test_the_life_that_was_lived_is_kept(self, state):
+        state, _ = engine.advance_cycle(state, base_locations())
+        resident = state["residents"][0]
+        needs_before = dict(resident["needs"])
+        money_before = resident["money"]
+        location_before = resident["location_id"]
+        engine.refresh_content(state)
+        assert resident["needs"] == needs_before
+        assert resident["money"] == money_before
+        assert resident["location_id"] == location_before
+        assert resident.get("memory") is not None
+
+    def test_a_resident_the_player_invented_is_left_alone(self, state):
+        custom = engine.make_custom_resident({"name": "Test", "age": 30})
+        custom["look"]["outfit"]["top"] = "#ABCDEF"
+        custom["bio"] = "ma bio"
+        state["residents"].append(custom)
+        refreshed = engine.refresh_content(state)
+        stored = next(r for r in state["residents"] if r["id"] == custom["id"])
+        assert custom["id"] not in refreshed
+        assert stored["look"]["outfit"]["top"] == "#ABCDEF"
+        assert stored["bio"] == "ma bio"
+
+    def test_every_written_look_is_a_valid_colour(self):
+        import re
+
+        for spec in C.RESIDENTS:
+            look = spec["look"]
+            for hex_value in [look["skin"], look["hair"], look["eyes"]]:
+                assert re.fullmatch(r"#[0-9A-Fa-f]{6}", hex_value), hex_value
+            for hex_value in look["outfit"].values():
+                assert re.fullmatch(r"#[0-9A-Fa-f]{6}", hex_value), hex_value

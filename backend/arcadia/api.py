@@ -148,8 +148,11 @@ async def _state_or_create(db, provider) -> Dict[str, Any]:
     if state:
         state.pop("_id", None)
         # Legacy saves may predate a content update: heal missing keys instead of
-        # crashing on a KeyError deep inside the engine.
+        # crashing on a KeyError deep inside the engine, and re-apply the written
+        # presentation of the cast so a corrected art direction shows up in a
+        # game that is already running.
         _ensure_shape(state)
+        engine.refresh_content(state)
         return state
     locations = await _load_locations(db, provider)
     state = engine.new_state(locations)

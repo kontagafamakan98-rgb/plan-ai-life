@@ -47,14 +47,16 @@ LUCIDITY_DRIFT = 1.15
 LUCIDITY_NOTICE = 1.6  # extra suspicion when life goes suspiciously well
 
 MOODS: Dict[str, Dict[str, Any]] = {
-    "radiant": {"label": C.t("Rayonnant", "Radiant"), "color": "#FFD166", "icon": "radiant"},
-    "content": {"label": C.t("Serein", "Content"), "color": "#7BD389", "icon": "content"},
-    "focused": {"label": C.t("Concentré", "Focused"), "color": "#5AB0F0", "icon": "focused"},
-    "neutral": {"label": C.t("Neutre", "Neutral"), "color": "#B6BEC9", "icon": "neutral"},
-    "tired": {"label": C.t("Fatigué", "Tired"), "color": "#8A93A6", "icon": "tired"},
-    "anxious": {"label": C.t("Tendu", "Anxious"), "color": "#F09A5A", "icon": "anxious"},
-    "upset": {"label": C.t("À vif", "Upset"), "color": "#EF6A6A", "icon": "upset"},
-    "lost": {"label": C.t("Perdu", "Lost"), "color": "#7E8AA2", "icon": "lost"},
+    # Warm tones: the interface around the world is cold on purpose, but a mood
+    # is something the resident feels, so it never turns blue or grey.
+    "radiant": {"label": C.t("Rayonnant", "Radiant"), "color": "#FFC46B", "icon": "radiant"},
+    "content": {"label": C.t("Serein", "Content"), "color": "#9BC07A", "icon": "content"},
+    "focused": {"label": C.t("Concentré", "Focused"), "color": "#8FA9A6", "icon": "focused"},
+    "neutral": {"label": C.t("Neutre", "Neutral"), "color": "#C3B49A", "icon": "neutral"},
+    "tired": {"label": C.t("Fatigué", "Tired"), "color": "#B08A5E", "icon": "tired"},
+    "anxious": {"label": C.t("Tendu", "Anxious"), "color": "#E08A52", "icon": "anxious"},
+    "upset": {"label": C.t("À vif", "Upset"), "color": "#D96A5A", "icon": "upset"},
+    "lost": {"label": C.t("Perdu", "Lost"), "color": "#A0836E", "icon": "lost"},
 }
 
 WEATHER = [
@@ -234,7 +236,7 @@ def make_custom_resident(data: Dict[str, Any], user_id: Optional[str] = None) ->
             "hairstyle": data.get("hairstyle") or "bob",
             "eyes": data.get("eye_color") or "#6B4423",
             "outfit": {
-                "top": data.get("outfit_top") or "#5AB0F0",
+                "top": data.get("outfit_top") or "#B4623C",
                 "bottom": data.get("outfit_bottom") or "#2E3440",
                 "accent": data.get("outfit_accent") or "#FFD166",
             },
@@ -365,6 +367,33 @@ def global_lucidity(state: Dict[str, Any]) -> float:
 def chapter_for(cycle: int, max_cycles: int = MAX_CYCLES) -> int:
     third = max(1, max_cycles // 3)
     return min(3, 1 + (cycle - 1) // third)
+
+
+def refresh_content(state: Dict[str, Any]) -> List[str]:
+    """Re-apply the written presentation of the cast to a saved world.
+
+    A save keeps the life that has been lived (needs, memory, goals, where
+    somebody is standing) but takes its wardrobe, biography and hobbies from the
+    content file, so a correction to the art direction reaches a game that is
+    already in progress instead of waiting for a fresh iteration. Characters the
+    player created are left alone: nobody rewrites a resident they invented.
+
+    Returns the ids that were refreshed.
+    """
+    specs = {spec["id"]: spec for spec in C.RESIDENTS}
+    refreshed: List[str] = []
+    for resident in state.get("residents", []):
+        spec = specs.get(resident.get("id"))
+        if not spec or not resident.get("is_npc", True):
+            continue
+        resident["look"] = spec["look"]
+        resident["bio"] = spec["bio"]
+        resident["quote"] = spec["quote"]
+        resident["hobbies"] = list(spec["hobbies"])
+        resident["occupation"] = spec["occupation"]
+        resident["city"] = spec["city"]
+        refreshed.append(resident["id"])
+    return refreshed
 
 
 def chapter_label(chapter: int) -> Dict[str, str]:
