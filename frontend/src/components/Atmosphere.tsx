@@ -265,8 +265,8 @@ export function ForegroundFrame({
   hour: number;
 }) {
   const band = Math.max(44, height * 0.12);
-  const deep = mix(world.shadow, world.walnut, 0.34);
-  const dark = withAlpha(world.shadow, 0.5);
+  const deep = mix(world.walnut, world.shadow, 0.52);
+  const dark = withAlpha(world.shadow, 0.42);
 
   return (
     <View style={[styles.foreground, { height: band }]}>
@@ -328,14 +328,15 @@ export function HourGrade({ hour, height }: { hour: number; height: number }) {
   const dawn = hour >= 5 && hour < 8;
 
   const top = night
-    ? withAlpha(world.shadow, 0.34)
+    ? withAlpha(world.shadow, 0.44)
     : dusk
       ? withAlpha(world.haze, 0.2)
       : dawn
         ? withAlpha(world.glow, 0.14)
-        : withAlpha(world.rim, 0.06);
-  const bottom = night ? withAlpha(world.shadow, 0.32) : withAlpha(world.shadow, dusk ? 0.22 : 0.12);
-  const amber = night ? 0.09 : dusk ? 0.22 : dawn ? 0.17 : 0.05;
+        : withAlpha(world.rim, 0.1);
+  const bottom = night ? withAlpha(world.shadow, 0.46) : withAlpha(world.shadow, dusk ? 0.2 : 0.08);
+  /** After dark the room is lit by its lamps, so the amber goes up, not down. */
+  const amber = night ? 0.16 : dusk ? 0.22 : dawn ? 0.17 : 0.05;
 
   return (
     <View style={[styles.layer, { pointerEvents: 'box-none' }]}>
@@ -351,18 +352,49 @@ export function HourGrade({ hour, height }: { hour: number; height: number }) {
         style={[StyleSheet.absoluteFill, { height: height * 0.72 }]}
       />
       <LinearGradient
-        colors={['transparent', withAlpha(world.shadow, night ? 0.26 : 0.14)]}
+        colors={['transparent', withAlpha(world.shadow, night ? 0.24 : 0.1)]}
         start={{ x: 0.28, y: 0.1 }}
         end={{ x: 0, y: 0.5 }}
         style={StyleSheet.absoluteFill}
       />
       <LinearGradient
-        colors={['transparent', withAlpha(world.shadow, night ? 0.26 : 0.14)]}
+        colors={['transparent', withAlpha(world.shadow, night ? 0.24 : 0.1)]}
         start={{ x: 0.72, y: 0.1 }}
         end={{ x: 1, y: 0.5 }}
         style={StyleSheet.absoluteFill}
       />
     </View>
+  );
+}
+
+/**
+ * The last pass: a corner vignette.
+ *
+ * A photograph of a room falls off toward its corners. This does the same and
+ * nothing else: the middle of the picture keeps every value the light built,
+ * the four corners lose a fifth of theirs, and the eye is left in the middle of
+ * the room instead of on its edges.
+ */
+export function Vignette({
+  width,
+  height,
+  strength = 0.26,
+}: {
+  width: number;
+  height: number;
+  strength?: number;
+}) {
+  return (
+    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={styles.layer}>
+      <Defs>
+        <RadialGradient id="cornerFall" cx="0.5" cy="0.46" r="0.76">
+          <Stop offset="0.48" stopColor={withAlpha(world.shadow, 0)} />
+          <Stop offset="0.76" stopColor={withAlpha(world.shadow, strength * 0.4)} />
+          <Stop offset="1" stopColor={withAlpha(world.shadow, strength)} />
+        </RadialGradient>
+      </Defs>
+      <Rect x={0} y={0} width={width} height={height} fill="url(#cornerFall)" />
+    </Svg>
   );
 }
 

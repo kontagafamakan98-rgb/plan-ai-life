@@ -351,8 +351,8 @@ export function SceneryPropArt({ kind, accent, trim, uid }: Props) {
               <Path
                 key={index}
                 d={`M ${x} ${y} C ${x + leaf.bend * 0.4} ${y - leaf.len * 0.4} ${x + leaf.bend} ${y - leaf.len * 0.75} ${x + leaf.bend * 0.6} ${y - leaf.len} C ${x + leaf.bend * 0.1} ${y - leaf.len * 0.7} ${x + 0.6} ${y - leaf.len * 0.35} ${x} ${y} Z`}
-                fill={mix(world.sage, index % 2 ? world.sageDark : world.oak, 0.18)}
-                stroke={withAlpha(world.sageDark, 0.5)}
+                fill={index % 2 ? world.sage : warmLight(world.sageDark, 12, 0.24)}
+                stroke={withAlpha(world.sageDark, 0.6)}
                 strokeWidth={0.6}
               />
             );
@@ -376,7 +376,7 @@ export function SceneryPropArt({ kind, accent, trim, uid }: Props) {
             <G key={index}>
               <Path
                 d={`M ${crown.cx - crown.rx} ${crown.cy + crown.ry * 0.2} C ${crown.cx - crown.rx * 1.1} ${crown.cy - crown.ry} ${crown.cx + crown.rx * 1.1} ${crown.cy - crown.ry} ${crown.cx + crown.rx} ${crown.cy + crown.ry * 0.2} C ${crown.cx + crown.rx * 0.6} ${crown.cy + crown.ry} ${crown.cx - crown.rx * 0.6} ${crown.cy + crown.ry} ${crown.cx - crown.rx} ${crown.cy + crown.ry * 0.2} Z`}
-                fill={index === 0 ? mix(world.sage, world.sageDark, 0.3) : mix(world.sageDark, world.shadow, 0.18)}
+                fill={index === 0 ? world.sage : mix(world.sageDark, world.shadow, 0.14)}
                 stroke={withAlpha(world.sageDark, 0.6)}
                 strokeWidth={0.7}
               />

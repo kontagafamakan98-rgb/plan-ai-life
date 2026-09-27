@@ -49,7 +49,7 @@ import {
   SPRITE_GROUND_INSET,
 } from './ResidentSprite';
 import { PROP_BOX, SceneryPropArt, type PropKind } from './Scenery';
-import { Dust, ForegroundFrame, HourGrade, SunBloom, WallDressing } from './Atmosphere';
+import { Dust, ForegroundFrame, HourGrade, SunBloom, Vignette, WallDressing } from './Atmosphere';
 import { Room, depthScaleAt, floorXAt, floorYAt, geometryOf } from './Room';
 
 interface Prop {
@@ -216,10 +216,10 @@ const SCONCES: Record<string, number[]> = {
 
 /** Plaster mottling: the wall is not one flat tone, but it never becomes noise. */
 const PLASTER: { x: number; y: number; w: number; h: number; o: number }[] = [
-  { x: 0.04, y: 0.34, w: 0.3, h: 0.3, o: 0.16 },
-  { x: 0.44, y: 0.2, w: 0.36, h: 0.24, o: 0.12 },
-  { x: 0.72, y: 0.44, w: 0.26, h: 0.26, o: 0.14 },
-  { x: 0.24, y: 0.66, w: 0.28, h: 0.2, o: 0.1 },
+  { x: 0.04, y: 0.34, w: 0.3, h: 0.3, o: 0.1 },
+  { x: 0.44, y: 0.2, w: 0.36, h: 0.24, o: 0.07 },
+  { x: 0.72, y: 0.44, w: 0.26, h: 0.26, o: 0.09 },
+  { x: 0.24, y: 0.66, w: 0.28, h: 0.2, o: 0.07 },
 ];
 
 type GroundKind = 'grass' | 'sand' | 'rock' | 'cobble';
@@ -282,6 +282,11 @@ function Window({
   const frameLit = warmLight(trim, 22, 0.24);
   const frameDeep = warmShade(trim, -18, 0.3);
   const dusk = hour >= 17 && hour < 20;
+  /**
+   * What the glass shows. The sky of the hour, pulled toward the room: a pane
+   * of cold blue in the middle of a warm room reads as a hole, not as a window.
+   */
+  const glass = sky.map((tone) => mix(tone, world.glowSoft, 0.1));
 
   return (
     <View
@@ -302,7 +307,7 @@ function Window({
         ]}
       >
         <LinearGradient
-          colors={sky}
+          colors={glass as [string, string, ...string[]]}
           start={{ x: 0.2, y: 0 }}
           end={{ x: 0.8, y: 1 }}
           style={styles.windowGlass}
@@ -382,19 +387,25 @@ function Wall({
   // No daylight means lamps on the wall, so no room is ever left unlit.
   const sconces = windows.length ? [] : SCONCES[roomType] ?? [0.24, 0.76];
   const ambient = ambientLight(hour);
-  const plaster = mix(room.wall[0], world.plaster, 0.16);
-  const plasterLow = mix(room.wall[1], world.walnut, 0.24);
-  const wainscot = mix(world.wainscot, room.accent, 0.1);
-  const rail = warmLight(wainscot, 24, 0.24);
-  const ceiling = mix(room.wall[1], world.shadow, 0.42);
+  /**
+   * The wall in daylight: the plaster takes the light of the openings, so it is
+   * the brightest plane of the room, and only its lower third and the corner
+   * under the ceiling keep a shade. The same values as the shell in Room.tsx,
+   * or the back wall reads as a hole cut into it.
+   */
+  const plaster = mix(room.wall[0], world.plaster, 0.58);
+  const plasterLow = mix(room.wall[0], world.plaster, 0.3);
+  const wainscot = mix(world.wainscot, room.accent, 0.14);
+  const rail = warmLight(wainscot, 30, 0.26);
+  const ceiling = mix(room.wall[1], world.plaster, 0.34);
 
   return (
     <View style={[styles.wall, { height: wall.height }]}>
       {/* Painted plaster, lit from above. */}
       <View style={[styles.plasterField, { backgroundColor: plaster }]} />
       <LinearGradient
-        colors={['transparent', withAlpha(plasterLow, 0.5)]}
-        locations={[0.35, 1]}
+        colors={[withAlpha(world.glowSoft, 0.06 + ambient.intensity * 0.1), 'transparent', withAlpha(plasterLow, 0.34)]}
+        locations={[0, 0.42, 1]}
         style={[styles.plasterField, { pointerEvents: 'none' }]}
       />
       {PLASTER.map((patch, index) => (
@@ -421,12 +432,12 @@ function Wall({
         ]}
       >
         <LinearGradient
-          colors={[withAlpha(world.shadow, 0.4), 'transparent']}
+          colors={[withAlpha(world.shadow, 0.2), 'transparent']}
           style={StyleSheet.absoluteFill}
         />
       </View>
-      <View style={[styles.cornice, { backgroundColor: mix(plaster, world.rim, 0.24) }]} />
-      <View style={[styles.corniceShade, { backgroundColor: withAlpha(world.shadow, 0.24) }]} />
+      <View style={[styles.cornice, { backgroundColor: warmLight(plaster, 16, 0.3) }]} />
+      <View style={[styles.corniceShade, { backgroundColor: withAlpha(world.shadow, 0.2) }]} />
 
       {/* Openings. */}
       {windows.map((rect, index) => (
@@ -448,17 +459,17 @@ function Wall({
           style={[
             styles.spill,
             {
-              left: rect.x * wall.width - 6,
+              left: rect.x * wall.width - 10,
               top: (rect.y + rect.h) * wall.height,
-              width: rect.w * wall.width + 12,
-              height: wall.height * 0.42,
+              width: rect.w * wall.width + 20,
+              height: wall.height * 0.54,
             },
           , { pointerEvents: 'none' }]}
         >
           <LinearGradient
             colors={[
-              withAlpha(world.glow, 0.22 * ambient.intensity + 0.06),
-              withAlpha(world.glow, 0.06),
+              withAlpha(world.glowSoft, 0.3 * ambient.intensity + 0.1),
+              withAlpha(world.glow, 0.1),
               'transparent',
             ]}
             locations={[0, 0.55, 1]}
@@ -502,14 +513,15 @@ function Wall({
       {/* The wall is lived in: pictures, boards, pipes, a pendant or two. */}
       <WallDressing roomType={roomType} wall={wall} trim={room.trim} accent={room.accent} />
 
-      {/* Overall wash: warm at dusk and night, plain at noon. */}
+      {/* Overall wash: warm light from above, a shade where the wall meets the
+          floor, so the wall keeps a top and a bottom instead of one flat tone. */}
       <LinearGradient
         colors={[
           withAlpha(world.haze, 0.16 * ambient.warmth),
           'transparent',
-          withAlpha(world.shadow, 0.3),
+          withAlpha(world.shadow, 0.18),
         ]}
-        locations={[0, 0.42, 1]}
+        locations={[0, 0.5, 1]}
         style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
       />
     </View>
@@ -1070,11 +1082,14 @@ export function Stage({
           vignette: sky, wall, boards and cast end up in the same photograph. */}
       <HourGrade hour={gameHour} height={size.height} />
       <ForegroundFrame roomType={type} width={size.width} height={size.height} hour={gameHour} />
+      {/* Film edge: a wash front and back, then the corners. Both are light on
+          purpose: a heavy hand here flattens every value the room was lit for. */}
       <LinearGradient
-        colors={['rgba(24,12,5,0.42)', 'transparent', 'rgba(18,9,4,0.5)']}
-        locations={[0, 0.45, 1]}
+        colors={['rgba(24,12,5,0.1)', 'transparent', 'rgba(18,9,4,0.16)']}
+        locations={[0, 0.54, 1]}
         style={[styles.vignette, { pointerEvents: 'none' }]}
       />
+      <Vignette width={size.width} height={size.height} strength={0.26} />
     </View>
   );
 }
@@ -1089,7 +1104,8 @@ const styles = StyleSheet.create({
     minHeight: 300,
     aspectRatio: 1.6,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.5)',
+    /** A warm hairline: the picture sits in the world it shows, not in a hole. */
+    borderColor: withAlpha(world.shadow, 0.6),
   },
   rootContrast: { borderColor: world.brass, borderWidth: 2 },
   sky: { position: 'absolute', top: 0, left: 0, right: 0 },

@@ -149,13 +149,24 @@ export function Room({ geometry, room, hour, openings, wall }: Props) {
   const night = hour < 6 || hour >= 20;
   const floorDepth = height - wallBaseY;
 
-  const floorTone = mix(room.floor, world.oak, 0.24);
-  const floorToneAlt = mix(room.floorAlt, world.walnut, 0.3);
-  const plaster = mix(room.wall[0], world.plaster, 0.16);
-  const plasterLow = mix(room.wall[1], world.walnut, 0.24);
-  const wainscot = mix(world.wainscot, room.accent, 0.1);
-  const ceilingTone = mix(room.wall[1], world.shadow, 0.5);
-  const skirt = mix(room.trim, world.oak, 0.4);
+  /**
+   * The light in the room, as values rather than as hues.
+   *
+   * Daylight comes through the openings on the back wall, so that wall is the
+   * brightest plane, the ceiling catches a wash of it, the floor is lit away
+   * from the wall, and one side wall is in shade while the other keeps the
+   * light. A room whose planes all sit between a fifth and a third of the range
+   * looks dirty no matter how warm it is: these stay apart on purpose, and the
+   * glow of the lamps is what pushes the highlights the last step.
+   */
+  const litPlaster = mix(room.wall[0], world.plaster, 0.58);
+  const midPlaster = mix(room.wall[0], world.plaster, 0.38);
+  const floorTone = mix(room.floor, world.oak, 0.36);
+  const floorToneAlt = mix(room.floorAlt, world.walnut, 0.16);
+  const plaster = litPlaster;
+  const wainscot = mix(world.wainscot, room.accent, 0.12);
+  const ceilingTone = mix(room.wall[1], world.plaster, 0.46);
+  const skirt = mix(room.trim, world.oak, 0.66);
 
   const near = nearLimit(geometry);
   /** The rail of the ceiling that leaves the frame exactly in the top corner. */
@@ -249,41 +260,46 @@ export function Room({ geometry, room, hour, openings, wall }: Props) {
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ position: 'absolute', left: 0, top: 0 }}>
       <Defs>
+        {/* Shade side: the wall the daylight does not reach. */}
         <LinearGradient id="roomLeft" x1="0" y1="0.2" x2="1" y2="0.5">
-          <Stop offset="0" stopColor={warmShade(plasterLow, -22, 0.32)} />
-          <Stop offset="1" stopColor={plasterLow} />
+          <Stop offset="0" stopColor={warmShade(midPlaster, -34, 0.34)} />
+          <Stop offset="1" stopColor={warmShade(midPlaster, -6, 0.22)} />
         </LinearGradient>
+        {/* Lit side: it carries the light of the openings toward the viewer. */}
         <LinearGradient id="roomRight" x1="1" y1="0.2" x2="0" y2="0.5">
-          <Stop offset="0" stopColor={warmShade(plasterLow, -14, 0.3)} />
-          <Stop offset="1" stopColor={warmLight(plaster, 10, 0.24)} />
+          <Stop offset="0" stopColor={warmShade(litPlaster, -14, 0.24)} />
+          <Stop offset="1" stopColor={warmLight(litPlaster, 8, 0.22)} />
         </LinearGradient>
         <LinearGradient id="roomCeiling" x1="0.5" y1="0" x2="0.5" y2="1">
-          <Stop offset="0" stopColor={warmShade(ceilingTone, -14, 0.34)} />
-          <Stop offset="1" stopColor={ceilingTone} />
+          <Stop offset="0" stopColor={warmLight(ceilingTone, 12, 0.3)} />
+          <Stop offset="0.7" stopColor={ceilingTone} />
+          <Stop offset="1" stopColor={warmShade(ceilingTone, -30, 0.36)} />
         </LinearGradient>
+        {/* Floor: shaded where it meets the wall, lit where the beams land. */}
         <LinearGradient id="roomFloor" x1="0.5" y1="0" x2="0.5" y2="1">
-          <Stop offset="0" stopColor={mix(floorToneAlt, world.shadow, 0.34)} />
-          <Stop offset="0.42" stopColor={floorTone} />
-          <Stop offset="1" stopColor={warmLight(floorTone, 18, 0.24)} />
+          <Stop offset="0" stopColor={mix(floorToneAlt, world.shadow, 0.42)} />
+          <Stop offset="0.34" stopColor={warmShade(floorTone, -8, 0.24)} />
+          <Stop offset="1" stopColor={warmLight(floorTone, 34, 0.26)} />
         </LinearGradient>
         <LinearGradient id="roomFloorFade" x1="0.5" y1="0" x2="0.5" y2="1">
-          <Stop offset="0" stopColor={withAlpha(world.shadow, 0.5)} />
-          <Stop offset="0.35" stopColor={withAlpha(world.shadow, 0.12)} />
+          <Stop offset="0" stopColor={withAlpha(world.shadow, 0.26)} />
+          <Stop offset="0.35" stopColor={withAlpha(world.shadow, 0.06)} />
           <Stop offset="1" stopColor={withAlpha(world.shadow, 0)} />
         </LinearGradient>
         <RadialGradient id="roomPool" cx="0.5" cy="0.5" r="0.5">
-          <Stop offset="0" stopColor={withAlpha(world.glow, 0.55)} />
+          <Stop offset="0" stopColor={withAlpha(world.glowSoft, 0.86)} />
+          <Stop offset="0.42" stopColor={withAlpha(world.glow, 0.4)} />
           <Stop offset="1" stopColor={withAlpha(world.glow, 0)} />
         </RadialGradient>
         <LinearGradient id="roomWarm" x1="0.5" y1="1" x2="0.5" y2="0">
-          <Stop offset="0" stopColor={withAlpha(world.rim, 0.16)} />
+          <Stop offset="0" stopColor={withAlpha(world.rim, 0.22)} />
           <Stop offset="1" stopColor={withAlpha(world.rim, 0)} />
         </LinearGradient>
       </Defs>
 
-      {/* Ceiling: a plane above the room, darker than every wall. */}
+      {/* Ceiling: a plane above the room, in shade but never in the dark. */}
       <Path d={ceiling} fill="url(#roomCeiling)" />
-      <Path d={ceiling} fill={withAlpha(world.shadow, night ? 0.5 : 0.3)} />
+      <Path d={ceiling} fill={withAlpha(world.shadow, night ? 0.34 : 0.14)} />
       <Path d={`M ${inset} ${ceilingY} L ${width - inset} ${ceilingY}`} stroke={warmLight(plaster, 20, 0.24)} strokeWidth={2.4} />
       <Path d={`M ${inset} ${ceilingY + 2.6} L ${width - inset} ${ceilingY + 2.6}`} stroke={withAlpha(world.shadow, 0.35)} strokeWidth={1.6} />
 
@@ -396,18 +412,22 @@ export function Room({ geometry, room, hour, openings, wall }: Props) {
         const pass = 0.34 + ambient.intensity * 0.5;
         return (
           <G key={`beam${index}`} opacity={pass}>
-            <Path d={beam} fill={withAlpha(world.glowSoft, 0.12 + ambient.intensity * 0.12)} />
-            <Path d={landing} fill={withAlpha(world.glow, 0.14 + ambient.intensity * 0.14)} />
-            <Path d={`M ${foot0.x} ${foot0.y} L ${foot1.x} ${foot1.y}`} stroke={withAlpha(world.glow, 0.3 + ambient.intensity * 0.3)} strokeWidth={2} />
+            <Path d={beam} fill={withAlpha(world.glowSoft, 0.22 + ambient.intensity * 0.26)} />
+            <Path d={landing} fill={withAlpha(world.glowSoft, 0.3 + ambient.intensity * 0.34)} />
+            <Path d={`M ${foot0.x} ${foot0.y} L ${foot1.x} ${foot1.y}`} stroke={withAlpha(world.rim, 0.4 + ambient.intensity * 0.4)} strokeWidth={2.4} />
           </G>
         );
       })}
 
       {/* Haze at the far end, warmth where the light lands, shade near. */}
       <Path d={floor} fill="url(#roomFloorFade)" opacity={0.9} />
-      <Ellipse cx={width / 2} cy={wallBaseY + floorDepth * 0.42} rx={width * 0.42} ry={floorDepth * 0.5} fill="url(#roomPool)" opacity={0.4 + ambient.intensity * 0.3} />
-      <Path d={floor} fill="url(#roomWarm)" opacity={0.5} />
-      <Rect x={0} y={0} width={width} height={height} fill={withAlpha(world.haze, ambient.warmth * 0.05)} />
+      <Ellipse cx={width / 2} cy={wallBaseY + floorDepth * 0.44} rx={width * 0.44} ry={floorDepth * 0.52} fill="url(#roomPool)" opacity={0.42 + ambient.intensity * 0.34} />
+      <Path d={floor} fill="url(#roomWarm)" opacity={0.6} />
+      <Rect x={0} y={0} width={width} height={height} fill={withAlpha(world.haze, ambient.warmth * 0.06)} />
+      {/* The hot edge where the daylight pools on the boards: the one place in
+          the frame that is allowed to burn out. */}
+      <Ellipse cx={width / 2} cy={wallBaseY + floorDepth * 0.62} rx={width * 0.2} ry={floorDepth * 0.14} fill={withAlpha(world.glowSoft, 0.16 + ambient.intensity * 0.26)} />
+      <Ellipse cx={width * 0.46} cy={wallBaseY + floorDepth * 0.58} rx={width * 0.1} ry={floorDepth * 0.07} fill={withAlpha(world.rim, 0.16 + ambient.intensity * 0.22)} />
       <Path d={`M ${inset} ${wallBaseY} L ${width - inset} ${wallBaseY}`} stroke={withAlpha(world.shadow, 0.4)} strokeWidth={2.4} />
     </Svg>
   );
