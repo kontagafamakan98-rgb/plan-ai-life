@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { LogBox } from "react-native";
 
 import { useIconFonts } from "@/src/hooks/use-icon-fonts";
+import { I18nProvider } from "@/src/game/i18n";
+import { PreferencesProvider } from "@/src/components/ui";
 
 
 // Disable logbox errors etc so that users can see the app
@@ -29,5 +31,13 @@ export default function RootLayout() {
   // the app — icons will tofu, but the app still boots.
   if (!loaded && !error) return null;
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  // Language and accessibility preferences wrap every route: the whole app is
+  // translated and the reduce-motion/contrast choices must reach every screen.
+  return (
+    <I18nProvider>
+      <PreferencesProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </PreferencesProvider>
+    </I18nProvider>
+  );
 }
