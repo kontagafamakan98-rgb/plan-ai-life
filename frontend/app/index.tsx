@@ -1,9 +1,9 @@
 /**
- * ARCADIA-9 — the game screen.
+ * ARCADIA-9: the game screen.
  *
  * One page, one loop: read the world, advance it, spend Flux to bend a life,
  * answer the dilemma the world asks, and see exactly what changed. Every
- * control here is wired to a real endpoint — including pause, export/import and
+ * control here is wired to a real endpoint: including pause, export/import and
  * the release of a new iteration.
  *
  * Layout is a single vertical flow so the page always works on a phone, and the
@@ -13,6 +13,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -53,12 +54,14 @@ import {
   BodyText,
   IconButton,
   Panel,
-  Pill,
+  Tag,
   Row,
   SectionTitle,
   usePrefs,
 } from '../src/components/ui';
+import { glyph } from '../src/game/icons';
 import { useI18n } from '../src/game/i18n';
+import { Icon } from '../src/components/Icon';
 import { useGame } from '../src/game/useGame';
 import type { LocationView, Resident } from '../src/game/types';
 import { elevation, layout, palette, radius, space, type as typeTokens } from '../src/theme';
@@ -66,6 +69,7 @@ import { elevation, layout, palette, radius, space, type as typeTokens } from '.
 export default function ArcadiaScreen() {
   const { t, lt } = useI18n();
   const { contrast } = usePrefs();
+  const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
   // The breakpoint follows the width the app actually occupies, not the window:
   // inside an embedded view or a resized desktop window the two can disagree, and
@@ -177,7 +181,7 @@ export default function ArcadiaScreen() {
       if (query && !haystack.includes(query)) continue;
       let group = groups.find((entry) => entry.country === location.country);
       if (!group) {
-        group = { country: location.country || '—', items: [] };
+        group = { country: location.country || t('places.unknown'), items: [] };
         groups.push(group);
       }
       group.items.push(location);
@@ -185,7 +189,7 @@ export default function ArcadiaScreen() {
     groups.sort((a, b) => a.country.localeCompare(b.country));
     for (const group of groups) group.items.sort((a, b) => a.name.localeCompare(b.name));
     return groups;
-  }, [game.locations, placeQuery]);
+  }, [game.locations, placeQuery, t]);
 
   const endingOpen = Boolean(state?.ending) && !endingDismissed;
 
@@ -240,7 +244,7 @@ export default function ArcadiaScreen() {
           <StatusBar style="light" />
           <Text style={styles.bootBrand}>ARCADIA-9</Text>
           <Text style={styles.bootTagline}>{t('app.tagline')}</Text>
-          <ActivityIndicator color={palette.cyan} style={{ marginTop: space.lg }} />
+          <ActivityIndicator color={palette.accent} style={{ marginTop: space.lg }} />
           <Text style={styles.bootLoading}>{t('common.loading')}</Text>
         </SafeAreaView>
       </View>
@@ -302,29 +306,30 @@ export default function ArcadiaScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipStrip}
           >
-            <Pill
+            <Tag
               label={`${t('common.chapter')} ${state?.chapter ?? 1}${
                 state ? ` · ${lt(state.chapter_label)}` : ''
               }`}
-              icon="📖"
-              color={palette.cyan}
+              icon={glyph('codex')}
+              color={palette.accent}
             />
             {state ? (
-              <Pill
-                label={`${state.weather.icon} ${lt(state.weather.label)}`}
+              <Tag
+                label={lt(state.weather.label)}
+                icon={glyph(state.weather.icon)}
                 color={palette.inkSoft}
               />
             ) : null}
-            <Pill
+            <Tag
               label={`${t('app.role')} · ${t('common.score')} ${state?.score ?? 0}`}
-              icon="👁️"
-              color={palette.violet}
+              icon={glyph('vision')}
+              color={palette.steel}
             />
             {state?.anomaly_visible ? (
-              <Pill label={state.anomaly.name} icon="🕳️" color={palette.rose} />
+              <Tag label={state.anomaly.name} icon={glyph('anomaly')} color={palette.rose} />
             ) : null}
             {state?.paused ? (
-              <Pill label={t('cycle.paused')} icon="⏸️" color={palette.amber} />
+              <Tag label={t('cycle.paused')} icon={glyph('pause')} color={palette.amber} />
             ) : null}
           </ScrollView>
         </View>
@@ -399,7 +404,7 @@ export default function ArcadiaScreen() {
                       subtitle={t('roster.subtitle', { n: roster.length })}
                       icon="people-outline"
                       right={
-                        <Pill
+                        <Tag
                           label={`${t('stage.hereNow')} · ${hereNow.length}`}
                           color={palette.green}
                           compact
@@ -460,6 +465,27 @@ export default function ArcadiaScreen() {
                   onPress={() => setPlacesOpen(true)}
                 />
               </Row>
+
+              {/* The footer states what the build does and links the two real pages. */}
+              <View style={styles.siteFooter}>
+                <Text style={styles.footerNotice}>{t('footer.notice')}</Text>
+                <Row gap={space.sm} wrap>
+                  <ActionButton
+                    label={t('legal.openGdpr')}
+                    icon="document-text-outline"
+                    variant="ghost"
+                    compact
+                    onPress={() => router.push('/legal/rgpd')}
+                  />
+                  <ActionButton
+                    label={t('legal.openTerms')}
+                    icon="document-text-outline"
+                    variant="ghost"
+                    compact
+                    onPress={() => router.push('/legal/cgu')}
+                  />
+                </Row>
+              </View>
             </>
           ) : (
             <Panel>
@@ -626,7 +652,7 @@ function PlacePicker({
                         pressed && { opacity: 0.9 },
                       ]}
                     >
-                      <Text style={styles.placeEmoji}>{location.emoji}</Text>
+                      <Icon name={glyph(location.icon ?? location.type)} size={17} color={palette.inkSoft} />
                       <View style={styles.grow}>
                         <Text style={styles.placeName} numberOfLines={1}>
                           {location.name}
@@ -635,7 +661,7 @@ function PlacePicker({
                           {location.city} · {location.type}
                         </Text>
                       </View>
-                      <Pill
+                      <Tag
                         label={
                           present.length
                             ? `${present.length}`
@@ -725,7 +751,7 @@ const styles = StyleSheet.create({
   countryBlock: { marginTop: space.md },
   countryHeader: {
     ...typeTokens.micro,
-    color: palette.cyan,
+    color: palette.accent,
     textTransform: 'uppercase',
     marginBottom: space.xs,
   },
@@ -742,8 +768,9 @@ const styles = StyleSheet.create({
     backgroundColor: palette.surface,
     marginBottom: space.xs,
   },
-  placeRowActive: { borderColor: `${palette.cyan}88`, backgroundColor: `${palette.cyan}1F` },
-  placeEmoji: { fontSize: 20 },
+  placeRowActive: { borderColor: `${palette.accent}88`, backgroundColor: `${palette.accent}1F` },
+  siteFooter: { marginTop: space.md, gap: space.sm },
+  footerNotice: { ...typeTokens.caption, color: palette.inkMuted, lineHeight: 17 },
   placeName: { ...typeTokens.label, color: palette.ink },
   placeMeta: { ...typeTokens.caption, color: palette.inkMuted, marginTop: 1 },
 });

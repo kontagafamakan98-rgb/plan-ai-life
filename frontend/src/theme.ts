@@ -1,45 +1,47 @@
 /**
  * ARCADIA-9 design tokens.
  *
- * One place for colour, spacing, radii and type so every surface stays
- * coherent. Colours are chosen for contrast against the deep indigo base:
- * body text sits at ~13:1 and the muted text tier still clears 4.5:1.
+ * Direction: an instrument panel, not a poster. Flat graphite surfaces, one
+ * pixel hairlines, square corners, a single cool accent and functional colours
+ * for state. No purple, no decorative gradients, no glow. Text tiers are
+ * checked against the `void` background: ink ~14:1, inkSoft ~9:1, inkMuted
+ * ~5:1, so every tier stays readable.
  */
 
 export const palette = {
   // Base
-  void: '#070A18',
-  deep: '#0D1130',
-  deep2: '#171A45',
-  horizon: '#2A2560',
-  surface: 'rgba(255,255,255,0.055)',
-  surfaceStrong: 'rgba(255,255,255,0.10)',
-  border: 'rgba(255,255,255,0.12)',
-  borderStrong: 'rgba(255,255,255,0.22)',
+  void: '#0B0D10',
+  deep: '#12151A',
+  deep2: '#191D23',
+  horizon: '#242A32',
+  surface: 'rgba(255,255,255,0.045)',
+  surfaceStrong: 'rgba(255,255,255,0.085)',
+  border: 'rgba(255,255,255,0.10)',
+  borderStrong: 'rgba(255,255,255,0.20)',
 
   // Ink
-  ink: '#F4F6FF',
-  inkSoft: '#C7CDE6',
-  inkMuted: '#9AA3C4',
+  ink: '#EEF1F4',
+  inkSoft: '#C0C7CE',
+  inkMuted: '#8A929B',
 
-  // Accents
-  cyan: '#6EE7F9',
-  cyanDeep: '#1E93B0',
-  violet: '#A78BFA',
-  violetDeep: '#5B3FBF',
-  amber: '#FBBF24',
-  rose: '#FB7185',
-  green: '#4ADE80',
-  lime: '#BEF264',
+  // One cool accent, then functional colours. Deliberately desaturated.
+  accent: '#4E9DB4',
+  accentDeep: '#2A6478',
+  steel: '#7C93A8',
+  steelDeep: '#3E5062',
+  amber: '#C99A45',
+  rose: '#C8605A',
+  green: '#5FA37A',
+  lime: '#96B96A',
 
   // Semantic
-  flux: '#FBBF24',
-  stability: '#4ADE80',
-  lucidity: '#A78BFA',
-  danger: '#FB7185',
-  warning: '#F59E0B',
-  good: '#34D399',
-  over: '#FB7185',
+  flux: '#C99A45',
+  stability: '#5FA37A',
+  lucidity: '#7C93A8',
+  danger: '#C8605A',
+  warning: '#B9803A',
+  good: '#5FA37A',
+  over: '#C8605A',
 }
 
 export const space = {
@@ -52,22 +54,26 @@ export const space = {
   xxl: 32,
 }
 
+/** Square geometry throughout: nothing interactive is pill shaped. */
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 18,
-  xl: 26,
-  pill: 999,
+  none: 0,
+  xs: 3,
+  sm: 6,
+  md: 8,
+  lg: 12,
+  xl: 16,
 }
 
 export const type = {
-  brand: { fontSize: 24, fontWeight: '800' as const, letterSpacing: 2.5 },
+  brand: { fontSize: 20, fontWeight: '700' as const, letterSpacing: 1.2 },
   display: { fontSize: 20, fontWeight: '700' as const },
-  title: { fontSize: 16, fontWeight: '700' as const },
+  title: { fontSize: 15, fontWeight: '700' as const },
   body: { fontSize: 14, fontWeight: '500' as const },
   label: { fontSize: 12, fontWeight: '600' as const },
   caption: { fontSize: 11, fontWeight: '500' as const },
   micro: { fontSize: 10, fontWeight: '600' as const, letterSpacing: 0.8 },
+  /** Figures line up in columns, like a readout. */
+  numeric: { fontSize: 14, fontWeight: '700' as const, fontVariant: ['tabular-nums'] as const },
 }
 
 export const layout = {
@@ -80,17 +86,17 @@ export const layout = {
 export const elevation = {
   card: {
     shadowColor: '#000',
-    shadowOpacity: 0.32,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   float: {
     shadowColor: '#000',
-    shadowOpacity: 0.45,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 12,
+    shadowOpacity: 0.34,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
 }
 
@@ -104,8 +110,8 @@ export function meterColor(value: number): string {
 }
 
 export function lucidityColor(value: number): string {
-  if (value < 30) return palette.cyan
-  if (value < 55) return palette.violet
+  if (value < 30) return palette.accent
+  if (value < 55) return palette.steel
   if (value < 75) return palette.amber
   return palette.rose
 }
@@ -117,37 +123,40 @@ export function stabilityColor(value: number): string {
   return palette.lime
 }
 
-/** Background gradient stops for the sky, chosen from the in-game hour. */
+/**
+ * Background stops for the sky, chosen from the in-game hour. These are the
+ * muted greys, dust blues and dust yellows of a filmed city, never saturated.
+ */
 export function skyGradient(hour: number): [string, string, ...string[]] {
-  if (hour < 5) return ['#080B22', '#131A44', '#1E2350']
-  if (hour < 8) return ['#2B2A5E', '#6B5AA6', '#D9A6A0']
-  if (hour < 12) return ['#3E7FC1', '#7FB6E8', '#CFE7FA']
-  if (hour < 16) return ['#3B86CE', '#83BCEE', '#DCEEFB']
-  if (hour < 19) return ['#2E4E93', '#B06A94', '#F0A868']
-  if (hour < 22) return ['#141A44', '#2C2A62', '#5A3F7A']
-  return ['#070A1E', '#101538', '#1A1F45']
+  if (hour < 5) return ['#0A0D12', '#111722', '#171E29']
+  if (hour < 8) return ['#26313C', '#4C5866', '#88796B']
+  if (hour < 12) return ['#37536A', '#6C8FA4', '#B4C7D3']
+  if (hour < 16) return ['#3C5F76', '#7A9EB2', '#C2D5DF']
+  if (hour < 19) return ['#2A3E52', '#6B7078', '#A98461']
+  if (hour < 22) return ['#131A24', '#212936', '#333C49']
+  return ['#0A0D12', '#121822', '#1A212B']
 }
 
-/** Wall/floor colours per location type — the room the residents live in. */
+/** Wall/floor colours per location type. Muted materials: plaster, wood, stone. */
 export const roomPalette: Record<
   string,
   { wall: [string, string]; floor: string; floorAlt: string; accent: string }
 > = {
-  cafe: { wall: ['#4A3527', '#2E2118'], floor: '#8B6A45', floorAlt: '#7A5C3B', accent: '#E8B96A' },
-  apartment: { wall: ['#3B3153', '#241E36'], floor: '#6E5C7C', floorAlt: '#5F4F6C', accent: '#C79BD8' },
-  office: { wall: ['#2C3A4A', '#1A242F'], floor: '#546176', floorAlt: '#4A5668', accent: '#7FD1E8' },
-  park: { wall: ['#2E5C46', '#1B3A2C'], floor: '#4E8B5C', floorAlt: '#447A52', accent: '#BEF264' },
-  gym: { wall: ['#4A2E33', '#2C1B1F'], floor: '#5B4148', floorAlt: '#513A41', accent: '#FB7185' },
-  restaurant: { wall: ['#4E3324', '#2F1E15'], floor: '#7A5136', floorAlt: '#6A4630', accent: '#FBBF24' },
-  club: { wall: ['#2A1B4A', '#170F2C'], floor: '#3B2A63', floorAlt: '#332456', accent: '#F472B6' },
-  beach: { wall: ['#2E7BA6', '#1D5A7C'], floor: '#D9BE7A', floorAlt: '#CBAC68', accent: '#6EE7F9' },
-  school: { wall: ['#3A4A63', '#232D3E'], floor: '#5E6B84', floorAlt: '#546078', accent: '#93C5FD' },
-  hospital: { wall: ['#3C4A57', '#222C36'], floor: '#66757F', floorAlt: '#5C6A74', accent: '#A5F3FC' },
-  market: { wall: ['#5A3A2A', '#37231A'], floor: '#8A6242', floorAlt: '#7A563A', accent: '#FDBA74' },
-  museum: { wall: ['#3A2F5E', '#221B3A'], floor: '#584C7E', floorAlt: '#4F4472', accent: '#C4B5FD' },
-  cinema: { wall: ['#241E3A', '#141024'], floor: '#3B3454', floorAlt: '#332D4A', accent: '#F9A8D4' },
-  temple: { wall: ['#5C4A1F', '#382C11'], floor: '#8A7434', floorAlt: '#7A662D', accent: '#FDE68A' },
-  mountain: { wall: ['#3E5A74', '#24374A'], floor: '#8798A8', floorAlt: '#78899A', accent: '#E0F2FE' },
+  cafe: { wall: ['#42352A', '#2B231C'], floor: '#6E5942', floorAlt: '#63503B', accent: '#C99A45' },
+  apartment: { wall: ['#333840', '#22262C'], floor: '#4E545C', floorAlt: '#464C54', accent: '#7C93A8' },
+  office: { wall: ['#2C3540', '#1D242C'], floor: '#454E58', floorAlt: '#3E4650', accent: '#4E9DB4' },
+  park: { wall: ['#2C4136', '#1D2C25'], floor: '#4A6549', floorAlt: '#425B42', accent: '#96B96A' },
+  gym: { wall: ['#3B3234', '#28211F'], floor: '#4C4444', floorAlt: '#443D3D', accent: '#C8605A' },
+  restaurant: { wall: ['#40332A', '#2A211A'], floor: '#63503C', floorAlt: '#594734', accent: '#C99A45' },
+  club: { wall: ['#24282F', '#161A20'], floor: '#33383F', floorAlt: '#2C3138', accent: '#C99A45' },
+  beach: { wall: ['#2F5F73', '#204653'], floor: '#B49B6B', floorAlt: '#A68F62', accent: '#4E9DB4' },
+  school: { wall: ['#343C47', '#232931'], floor: '#4B545F', floorAlt: '#434C57', accent: '#4E9DB4' },
+  hospital: { wall: ['#384349', '#242C31'], floor: '#525C62', floorAlt: '#4A545A', accent: '#8FB6BE' },
+  market: { wall: ['#463528', '#2E231A'], floor: '#6B5540', floorAlt: '#604C39', accent: '#B9803A' },
+  museum: { wall: ['#343540', '#23242C'], floor: '#4E4F5A', floorAlt: '#464752', accent: '#7C93A8' },
+  cinema: { wall: ['#26262E', '#18181E'], floor: '#38383F', floorAlt: '#313138', accent: '#8B7A5C' },
+  temple: { wall: ['#47402C', '#2F2A1D'], floor: '#6E6244', floorAlt: '#64593D', accent: '#C99A45' },
+  mountain: { wall: ['#37474F', '#232F36'], floor: '#6E7A82', floorAlt: '#66727A', accent: '#9FB4BE' },
 }
 
 export const defaultRoom = roomPalette.apartment

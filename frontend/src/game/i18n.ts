@@ -113,6 +113,7 @@ const fr: Dict = {
   'places.none': 'Aucun lieu ne correspond.',
   'places.present': '{n} présent(s)',
   'places.empty': 'Personne ici pour le moment.',
+  'places.unknown': 'Lieu inconnu',
   'app.iteration': 'Itération {n}',
 
   'deck.title': 'Interventions',
@@ -205,6 +206,19 @@ const fr: Dict = {
   'support.never': "Ce que ça ne donne jamais",
   'support.disabled': 'Achats désactivés dans cette démo',
   'support.why': 'Pourquoi ces offres existent',
+  'support.notForSale': 'Pas en vente',
+  'support.noPrice':
+    "Aucun prix n'est affiché parce que rien n'est en vente : le paiement n'est pas branché dans cette version.",
+
+  'legal.title': 'Informations légales',
+  'legal.gdpr': 'Données personnelles (RGPD)',
+  'legal.terms': "Conditions générales d'utilisation",
+  'legal.openGdpr': 'Lire la page RGPD',
+  'legal.openTerms': "Lire les conditions d'utilisation",
+  'legal.back': 'Revenir au jeu',
+  'legal.updated': 'Version du 27 septembre 2026',
+  'footer.notice':
+    "Aucune mesure d'audience, aucune publicité, aucun paiement : cette version ne conserve que votre partie et vos préférences.",
 
   'toast.cycle': 'Cycle {n} résolu',
   'toast.intervention': 'Intervention appliquée',
@@ -310,6 +324,7 @@ const en: Dict = {
   'places.none': 'No place matches.',
   'places.present': '{n} present',
   'places.empty': 'Nobody here right now.',
+  'places.unknown': 'Unknown place',
   'app.iteration': 'Iteration {n}',
 
   'deck.title': 'Interventions',
@@ -401,6 +416,19 @@ const en: Dict = {
   'support.grants': 'What it gives',
   'support.never': 'What it never gives',
   'support.disabled': 'Purchases disabled in this demo',
+  'support.notForSale': 'Not for sale',
+  'support.noPrice':
+    'No price is shown because nothing is on sale: no payment path is connected in this build.',
+
+  'legal.title': 'Legal information',
+  'legal.gdpr': 'Personal data (GDPR)',
+  'legal.terms': 'Terms of use',
+  'legal.openGdpr': 'Read the GDPR page',
+  'legal.openTerms': 'Read the terms of use',
+  'legal.back': 'Back to the game',
+  'legal.updated': 'Version of 27 September 2026',
+  'footer.notice':
+    'No analytics, no advertising, no payments: this build only keeps your run and your preferences.',
   'support.why': 'Why these offers exist',
 
   'toast.cycle': 'Cycle {n} resolved',

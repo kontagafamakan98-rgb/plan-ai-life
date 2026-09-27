@@ -39,6 +39,8 @@ import type {
   Resident,
   Signature,
 } from '../game/types';
+import { glyph } from '../game/icons';
+import { Icon } from './Icon';
 import { ResidentSprite } from './ResidentSprite';
 import {
   ActionButton,
@@ -48,22 +50,12 @@ import {
   IconButton,
   Meter,
   Panel,
-  Pill,
+  Tag,
   Row,
   SectionTitle,
   StatBlock,
   usePrefs,
 } from './ui';
-
-const NEED_ICONS: Record<string, string> = {
-  hunger: '🍽️',
-  energy: '⚡',
-  social: '💬',
-  hygiene: '🚿',
-  fun: '🎲',
-  bladder: '🚻',
-  comfort: '🛋️',
-};
 
 const NEED_ORDER = ['hunger', 'energy', 'social', 'fun', 'hygiene', 'comfort', 'bladder'];
 
@@ -92,15 +84,6 @@ const NEED_LABELS: Record<string, { fr: string; en: string }> = {
   comfort: { fr: 'Confort', en: 'Comfort' },
 };
 
-const ATTRIBUTE_ICONS: Record<string, string> = {
-  intelligence: '🧠',
-  strength: '💪',
-  charisma: '🗣️',
-  beauty: '✨',
-  creativity: '🎨',
-  luck: '🍀',
-};
-
 const PERSONALITY_LABELS: Record<string, { fr: string; en: string }> = {
   extroversion: { fr: 'Extraversion', en: 'Extroversion' },
   kindness: { fr: 'Bienveillance', en: 'Kindness' },
@@ -119,12 +102,12 @@ export function ResourceBar({ state }: { state: GameState }) {
   const stability = Math.round(state.stability);
   const lucidity = Math.round(state.lucidity);
   return (
-    <Panel style={styles.resourcePanel} gradient={['rgba(110,231,249,0.10)', 'rgba(167,139,250,0.06)']}>
+    <Panel style={styles.resourcePanel} tone={palette.accent}>
       <Row style={styles.resourceRow} gap={space.md}>
         <StatBlock
           label={t('stat.flux')}
           hint={t('stat.flux.hint')}
-          icon="✦"
+          icon={glyph('flux')}
           value={`${Math.round(state.flux)}`}
           color={palette.flux}
           progress={(state.flux / state.flux_cap) * 100}
@@ -132,7 +115,7 @@ export function ResourceBar({ state }: { state: GameState }) {
         <StatBlock
           label={t('stat.stability')}
           hint={t('stat.stability.hint')}
-          icon="▲"
+          icon={glyph('stability')}
           value={`${stability}`}
           color={stabilityColor(state.stability)}
           progress={state.stability}
@@ -140,7 +123,7 @@ export function ResourceBar({ state }: { state: GameState }) {
         <StatBlock
           label={t('stat.lucidity')}
           hint={t('stat.lucidity.hint')}
-          icon="◉"
+          icon={glyph('lucidity')}
           value={`${lucidity}`}
           color={lucidityColor(state.lucidity)}
           progress={state.lucidity}
@@ -148,9 +131,9 @@ export function ResourceBar({ state }: { state: GameState }) {
         <StatBlock
           label={t('stat.signatures')}
           hint={t('stat.signatures.hint')}
-          icon="★"
+          icon={glyph('signature')}
           value={`${state.signatures.length}/${state.signature_catalog.length}`}
-          color={palette.cyan}
+          color={palette.accent}
           progress={(state.signatures.length / Math.max(1, state.signature_catalog.length)) * 100}
         />
       </Row>
@@ -199,10 +182,10 @@ export function CycleControl({
             {t('common.chapter')} {state.chapter}
           </Text>
         </View>
-        <Pill
+        <Tag
           label={finished ? t('toast.ending') : `${remaining} ${t('cycle.untilEnd')}`}
           color={finished ? palette.rose : palette.inkSoft}
-          icon={finished ? '◼' : '⏳'}
+          icon={finished ? 'flag-outline' : 'hourglass-outline'}
         />
       </Row>
 
@@ -284,13 +267,13 @@ export function ResidentCard({
           <Text style={styles.residentName} numberOfLines={1}>
             {resident.name}
           </Text>
-          <Pill label={lt(resident.mood_label)} icon={resident.mood_icon} color={resident.mood_color} compact />
+          <Tag label={lt(resident.mood_label)} icon={glyph(resident.mood_icon)} color={resident.mood_color} compact />
         </Row>
         <Text style={styles.residentMeta} numberOfLines={1}>
           {lt(resident.occupation)} · {resident.age} · {resident.city}
         </Text>
         <Row gap={6} align="center" style={styles.residentActionRow}>
-          <Text style={styles.residentActionIcon}>{resident.current_action?.icon ?? '🌀'}</Text>
+          <Icon name={glyph(resident.current_action?.icon)} size={13} color={palette.accent} />
           <Text style={styles.residentAction} numberOfLines={1}>
             {lt(resident.current_action?.label)}
           </Text>
@@ -298,21 +281,15 @@ export function ResidentCard({
         <Row gap={6} align="center" style={styles.residentFooter}>
           <Ionicons name="location-outline" size={12} color={palette.inkMuted} />
           <Text style={styles.residentLocation} numberOfLines={1}>
-            {location ? `${location.emoji} ${location.name}` : resident.location_id}
+            {location ? location.name : resident.location_id}
           </Text>
           <View style={styles.spacer} />
-          <Text style={styles.residentNeeds}>
-            {needGlyph(lowest?.key)} {Math.round(lowest?.value ?? 0)}
-          </Text>
+          <Icon name={glyph(lowest?.key)} size={12} color={palette.inkMuted} />
+          <Text style={styles.residentNeeds}>{Math.round(lowest?.value ?? 0)}</Text>
         </Row>
       </View>
     </Pressable>
   );
-}
-
-/** Compact glyph for the need a resident is closest to losing. */
-function needGlyph(key?: string) {
-  return NEED_ICONS[key ?? ''] ?? '•';
 }
 
 export function ResidentSheet({
@@ -355,8 +332,8 @@ export function ResidentSheet({
                   {lt(resident.occupation)} · {resident.age}
                 </Text>
                 <Row gap={6} style={{ marginTop: 4 }}>
-                  <Pill label={lt(resident.mood_label)} icon={resident.mood_icon} color={resident.mood_color} compact />
-                  <Pill
+                  <Tag label={lt(resident.mood_label)} icon={glyph(resident.mood_icon)} color={resident.mood_color} compact />
+                  <Tag
                     label={`${t('roster.lucidity')} ${Math.round(resident.lucidity)}`}
                     color={lucidityColor(resident.lucidity)}
                     compact
@@ -374,12 +351,13 @@ export function ResidentSheet({
             ) : null}
 
             <View style={styles.sheetChips}>
-              <Pill label={location ? `${location.emoji} ${location.name}` : resident.location_id} color={palette.cyan} icon="📍" />
-              <Pill
-                label={`${resident.current_action?.icon ?? '🌀'} ${lt(resident.current_action?.label)}`}
+              <Tag label={location ? location.name : resident.location_id} color={palette.accent} icon={glyph('location')} />
+              <Tag
+                label={lt(resident.current_action?.label)}
                 color={palette.amber}
+                icon={glyph(resident.current_action?.icon)}
               />
-              <Pill label={`${t('roster.money')} ${Math.round(resident.money)}`} color={palette.lime} icon="💰" />
+              <Tag label={`${t('roster.money')} ${Math.round(resident.money)}`} color={palette.lime} icon={glyph('money')} />
             </View>
 
             <View style={styles.thoughtBlock}>
@@ -393,7 +371,7 @@ export function ResidentSheet({
                 <View key={key} style={styles.needCell}>
                   <Meter
                     label={NEED_LABELS[key]?.[lang] ?? key}
-                    icon={NEED_ICONS[key]}
+                    icon={glyph(key)}
                     value={needValue(resident.needs, key, 0)}
                     color={meterColor(needValue(resident.needs, key, 0))}
                   />
@@ -406,14 +384,14 @@ export function ResidentSheet({
               <View key={goal.id} style={styles.goalRow}>
                 <DotRing
                   progress={goal.progress}
-                  color={goal.complete ? palette.lime : palette.cyan}
+                  color={goal.complete ? palette.lime : palette.accent}
                   label={lt(goal.label)}
                   complete={goal.complete}
                 />
                 <View style={styles.goalBody}>
                   <Row justify="space-between" align="center">
                     <Text style={styles.goalLabel}>{lt(goal.label)}</Text>
-                    {goal.complete ? <Pill label={t('roster.complete')} color={palette.lime} compact /> : null}
+                    {goal.complete ? <Tag label={t('roster.complete')} color={palette.lime} compact /> : null}
                   </Row>
                   {goal.milestones.map((milestone, index) => (
                     <Row key={index} gap={6} align="center" style={styles.milestoneRow}>
@@ -460,7 +438,7 @@ export function ResidentSheet({
               .reverse()
               .map((entry, index) => (
                 <Row key={index} gap={space.sm} align="flex-start" style={styles.memoryRow}>
-                  <Text style={styles.memoryIcon}>{entry.icon}</Text>
+                  <Icon name={glyph(entry.icon)} size={13} color={palette.inkMuted} />
                   <View style={styles.grow}>
                     <Text style={styles.memoryText}>{lt(entry.text)}</Text>
                     <Text style={styles.memoryCycle}>
@@ -474,7 +452,7 @@ export function ResidentSheet({
             <Row wrap gap={space.sm}>
               {Object.entries(resident.attributes ?? {}).map(([key, value]) => (
                 <View key={key} style={styles.attributeChip}>
-                  <Text style={styles.attributeIcon}>{ATTRIBUTE_ICONS[key] ?? '⭐'}</Text>
+                  <Icon name={glyph(key)} size={14} color={palette.inkSoft} />
                   <Text style={styles.attributeValue}>{Math.round(value)}</Text>
                   <Text style={styles.attributeLabel}>{t(`attribute.${key}`)}</Text>
                 </View>
@@ -487,7 +465,7 @@ export function ResidentSheet({
                 key={key}
                 label={PERSONALITY_LABELS[key]?.[lang] ?? key}
                 value={value}
-                color={palette.violet}
+                color={palette.steel}
               />
             ))}
 
@@ -496,7 +474,7 @@ export function ResidentSheet({
                 <SectionTitle title={t('roster.hobbies')} />
                 <Row wrap gap={6}>
                   {resident.hobbies.map((hobby) => (
-                    <Pill key={hobby} label={hobby} color={palette.violet} compact />
+                    <Tag key={hobby} label={hobby} color={palette.steel} compact />
                   ))}
                 </Row>
               </>
@@ -509,7 +487,7 @@ export function ResidentSheet({
             <View style={styles.sheetFooter}>
               <ActionButton
                 label={t('roster.target')}
-                icon="sparkles"
+                icon="locate-outline"
                 variant="secondary"
                 onPress={() => onInterveneOption(resident)}
               />
@@ -573,13 +551,13 @@ export function InterventionDeck({
       <SectionTitle
         title={t('deck.title')}
         subtitle={t('deck.subtitle')}
-        icon="sparkles"
-        right={<Pill label={`${Math.round(state.flux)} ✦`} color={palette.flux} compact />}
+        icon="flash-outline"
+        right={<Tag label={`${Math.round(state.flux)}`} icon={glyph('flux')} color={palette.flux} compact />}
       />
 
       {preselectedResidentId ? (
         <View style={styles.targetBanner}>
-          <Ionicons name="person" size={13} color={palette.cyan} />
+          <Ionicons name="person" size={13} color={palette.accent} />
           <Text style={styles.targetBannerText}>
             {residents.find((resident) => resident.id === preselectedResidentId)?.name ?? ''}
           </Text>
@@ -626,9 +604,10 @@ export function InterventionDeck({
               ]}
             >
               <Row justify="space-between" align="center">
-                <Text style={styles.deckIcon}>{item.icon}</Text>
-                <Pill
-                  label={`${item.cost} ✦`}
+                <Icon name={glyph(item.icon)} size={18} color={palette.ink} />
+                <Tag
+                  label={`${item.cost}`}
+                  icon={glyph('flux')}
                   color={item.affordable ? palette.flux : palette.inkMuted}
                   compact
                 />
@@ -717,12 +696,12 @@ export function DilemmaCard({
     );
   }
   return (
-    <Panel gradient={['rgba(251,191,36,0.10)', 'rgba(251,113,133,0.05)']}>
+    <Panel tone={palette.amber}>
       <SectionTitle
         title={t('dilemma.title')}
         subtitle={t('dilemma.subtitle')}
         icon="git-branch"
-        right={<Pill label={`${t('common.cycle')} ${dilemma.cycle ?? '—'}`} color={palette.amber} compact />}
+        right={<Tag label={`${t('common.cycle')} ${dilemma.cycle ?? 1}`} color={palette.amber} compact />}
       />
       <Text style={styles.dilemmaPrompt}>{lt(dilemma.prompt)}</Text>
       <View style={styles.choiceList}>
@@ -812,7 +791,7 @@ export function Chronicle({
               onPress={() => entry.residents?.[0] && onSelectResident?.(entry.residents[0])}
               style={styles.chronicleRow}
             >
-              <Text style={styles.chronicleIcon}>{entry.icon}</Text>
+              <Icon name={glyph(entry.icon)} size={13} color={palette.inkMuted} />
               <View style={styles.grow}>
                 <Text style={styles.chronicleText}>{lt(entry.text)}</Text>
                 <Text style={styles.chronicleMeta}>
@@ -855,9 +834,12 @@ export function SignatureStrip({ state }: { state: GameState }) {
               accessibilityLabel={`${lt(signature.label)}. ${unlocked ? lt(signature.hint) : t('common.locked')}`}
               style={[styles.signatureChip, unlocked && styles.signatureChipUnlocked]}
             >
-              <Text style={[styles.signatureIcon, !unlocked && { opacity: 0.32 }]}>
-                {unlocked ? signature.icon : '🔒'}
-              </Text>
+              <Icon
+                name={unlocked ? glyph(signature.icon) : 'lock-closed-outline'}
+                size={17}
+                color={unlocked ? palette.lime : palette.inkMuted}
+                style={!unlocked && styles.lockedGlyph}
+              />
               <View style={styles.grow}>
                 <Text style={[styles.signatureLabel, !unlocked && { color: palette.inkMuted }]}>
                   {lt(signature.label)}
@@ -919,7 +901,7 @@ export function CycleReportSheet({
               />
               <CompactDelta
                 label={t('stat.lucidity')}
-                color={palette.violet}
+                color={palette.steel}
                 delta={report.world.lucidity_delta}
                 value={Math.round(report.world.lucidity_after)}
               />
@@ -930,7 +912,19 @@ export function CycleReportSheet({
                 <SectionTitle title={t('report.highlights')} />
                 {report.highlights.map((highlight, index) => (
                   <Row key={index} gap={space.sm} align="flex-start" style={styles.highlightRow}>
-                    <Text style={styles.highlightDot}>{highlight.kind === 'event' ? '🌐' : highlight.kind === 'bond' ? '🤝' : highlight.kind === 'anomaly' ? '🕳️' : '★'}</Text>
+                    <Icon
+                      name={glyph(
+                        highlight.kind === 'event'
+                          ? 'world'
+                          : highlight.kind === 'bond'
+                            ? 'bond'
+                            : highlight.kind === 'anomaly'
+                              ? 'anomaly'
+                              : 'goal',
+                      )}
+                      size={13}
+                      color={palette.inkMuted}
+                    />
                     <Text style={styles.highlightText}>{lt(highlight.text)}</Text>
                   </Row>
                 ))}
@@ -944,10 +938,10 @@ export function CycleReportSheet({
               <View key={entry.id} style={styles.reportRow}>
                 <Row justify="space-between" align="center">
                   <Text style={styles.reportName}>{entry.name}</Text>
-                  <Pill label={lt(entry.mood_label)} color={palette.inkSoft} compact />
+                  <Tag label={lt(entry.mood_label)} color={palette.inkSoft} compact />
                 </Row>
                 <Row gap={6} align="center" style={{ marginTop: 3 }}>
-                  <Text style={styles.reportActionIcon}>{entry.action.icon ?? '🌀'}</Text>
+                  <Icon name={glyph(entry.action.icon)} size={13} color={palette.accent} />
                   <Text style={styles.reportAction}>{lt(entry.action.label)}</Text>
                 </Row>
                 <Text style={styles.reportThought}>“{lt(entry.thought)}”</Text>
@@ -960,7 +954,7 @@ export function CycleReportSheet({
                     .slice(0, 5)
                     .map(([need, value]) => (
                       <View key={need} style={styles.needDeltaChip}>
-                        <Text style={styles.needDeltaIcon}>{NEED_ICONS[need] ?? '•'}</Text>
+                        <Icon name={glyph(need)} size={11} color={palette.inkMuted} />
                         <Text
                           style={[
                             styles.needDeltaText,
@@ -974,7 +968,7 @@ export function CycleReportSheet({
                     ))}
                   {entry.money_delta ? (
                     <View style={styles.needDeltaChip}>
-                      <Text style={styles.needDeltaIcon}>💰</Text>
+                      <Icon name={glyph('money')} size={11} color={palette.inkMuted} />
                       <Text
                         style={[
                           styles.needDeltaText,
@@ -995,9 +989,11 @@ export function CycleReportSheet({
                 <SectionTitle title={t('report.network')} />
                 {report.relationships.map((relation) => (
                   <Row key={relation.key} gap={space.sm} align="center" style={styles.relationRow}>
-                    <Text style={styles.relationLabel2}>
-                      {relation.a.replace('res_', '')} ↔ {relation.b.replace('res_', '')}
-                    </Text>
+                    <Row gap={5} align="center">
+                      <Text style={styles.relationLabel2}>{relation.a.replace('res_', '')}</Text>
+                      <Ionicons name="swap-horizontal" size={12} color={palette.inkMuted} />
+                      <Text style={styles.relationLabel2}>{relation.b.replace('res_', '')}</Text>
+                    </Row>
                     <View style={styles.grow} />
                     <DeltaChip delta={relation.delta} />
                   </Row>
@@ -1053,7 +1049,7 @@ export function ToastStack({
     <View style={styles.toastWrap} pointerEvents="box-none">
       {toasts.map((toast) => {
         const color =
-          toast.tone === 'good' ? palette.green : toast.tone === 'bad' ? palette.rose : palette.cyan;
+          toast.tone === 'good' ? palette.green : toast.tone === 'bad' ? palette.rose : palette.accent;
         return (
           <Pressable
             key={toast.id}
@@ -1093,7 +1089,7 @@ export function OfflineNotice({
 }) {
   const { t } = useI18n();
   return (
-    <Panel gradient={['rgba(251,113,133,0.16)', 'rgba(251,113,133,0.04)']}>
+    <Panel tone={palette.danger}>
       <SectionTitle title={t('offline.title')} icon="cloud-offline-outline" />
       <BodyText>
         {message ? `${message}\n\n` : ''}
@@ -1110,6 +1106,7 @@ export function OfflineNotice({
 const styles = StyleSheet.create({
   grow: { flex: 1 },
   spacer: { flex: 1 },
+  lockedGlyph: { opacity: 0.32 },
 
   resourcePanel: { marginBottom: space.md },
   resourceRow: { justifyContent: 'space-between' },
@@ -1121,11 +1118,11 @@ const styles = StyleSheet.create({
   cycleChapter: { ...typeTokens.caption, color: palette.inkMuted },
   progressTrack: {
     height: 6,
-    borderRadius: radius.pill,
+    borderRadius: radius.xs,
     backgroundColor: 'rgba(255,255,255,0.10)',
     overflow: 'hidden',
   },
-  progressFill: { height: '100%', backgroundColor: palette.cyan, borderRadius: radius.pill },
+  progressFill: { height: '100%', backgroundColor: palette.accent, borderRadius: radius.xs },
   cycleActions: { marginTop: space.md },
   pausedNote: { ...typeTokens.caption, color: palette.amber, marginTop: space.sm },
 
@@ -1141,19 +1138,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.sm,
     marginBottom: space.sm,
   },
-  residentCardSelected: { borderColor: palette.cyan, backgroundColor: 'rgba(110,231,249,0.10)' },
+  residentCardSelected: { borderColor: palette.accent, backgroundColor: 'rgba(78,157,180,0.10)' },
   residentCardAvatar: { width: 52, height: 78, justifyContent: 'flex-end', alignItems: 'center' },
   residentCardBody: { flex: 1, minWidth: 0 },
   residentName: { ...typeTokens.title, color: palette.ink, flexShrink: 1 },
   residentMeta: { ...typeTokens.caption, color: palette.inkMuted, marginTop: 1 },
   residentActionRow: { marginTop: 3 },
   residentActionIcon: { fontSize: 12 },
-  residentAction: { ...typeTokens.caption, color: palette.cyan, fontWeight: '600', flexShrink: 1 },
+  residentAction: { ...typeTokens.caption, color: palette.accent, fontWeight: '600', flexShrink: 1 },
   residentFooter: { marginTop: 4 },
   residentLocation: { ...typeTokens.caption, color: palette.inkMuted, flexShrink: 1 },
   residentNeeds: { ...typeTokens.micro, color: palette.inkSoft, letterSpacing: 0.4 },
 
-  sheetOverlay: { flex: 1, backgroundColor: 'rgba(3,4,12,0.86)', justifyContent: 'flex-end' },
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(8,10,13,0.86)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#0C1029',
     borderTopLeftRadius: radius.xl,
@@ -1169,17 +1166,17 @@ const styles = StyleSheet.create({
   sheetMeta: { ...typeTokens.caption, color: palette.inkMuted },
   sheetBody: { paddingHorizontal: space.md, paddingTop: space.md },
   sheetBio: { marginBottom: space.sm },
-  sheetQuote: { ...typeTokens.body, color: palette.violet, fontStyle: 'italic', marginBottom: space.sm },
+  sheetQuote: { ...typeTokens.body, color: palette.steel, fontStyle: 'italic', marginBottom: space.sm },
   sheetChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: space.md },
   thoughtBlock: {
-    backgroundColor: 'rgba(110,231,249,0.08)',
+    backgroundColor: 'rgba(78,157,180,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(110,231,249,0.28)',
+    borderColor: 'rgba(78,157,180,0.28)',
     borderRadius: radius.md,
     padding: space.md,
     marginBottom: space.md,
   },
-  thoughtLabel: { ...typeTokens.micro, color: palette.cyan, textTransform: 'uppercase' },
+  thoughtLabel: { ...typeTokens.micro, color: palette.accent, textTransform: 'uppercase' },
   thoughtText: { ...typeTokens.body, color: palette.ink, fontStyle: 'italic', marginTop: 4 },
   needsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   needCell: { width: '47%', minWidth: 140 },
@@ -1190,8 +1187,8 @@ const styles = StyleSheet.create({
   milestoneText: { ...typeTokens.caption, color: palette.inkMuted, flexShrink: 1 },
   relationRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginBottom: 6 },
   relationName: { ...typeTokens.caption, color: palette.inkSoft, width: 96 },
-  relationTrack: { flex: 1, height: 5, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.10)', overflow: 'hidden' },
-  relationFill: { height: '100%', backgroundColor: palette.violet, borderRadius: radius.pill },
+  relationTrack: { flex: 1, height: 5, borderRadius: radius.xs, backgroundColor: 'rgba(255,255,255,0.10)', overflow: 'hidden' },
+  relationFill: { height: '100%', backgroundColor: palette.steel, borderRadius: radius.xs },
   relationLabel: { ...typeTokens.micro, color: palette.inkMuted, width: 76, textAlign: 'right' },
   relationLabel2: { ...typeTokens.caption, color: palette.inkSoft },
   memoryRow: { marginBottom: space.sm },
@@ -1216,10 +1213,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(110,231,249,0.12)',
+    backgroundColor: 'rgba(78,157,180,0.12)',
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(110,231,249,0.35)',
+    borderColor: 'rgba(78,157,180,0.35)',
     paddingHorizontal: space.sm,
     paddingVertical: 6,
     marginBottom: space.sm,
@@ -1238,7 +1235,7 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   deckCardDisabled: { opacity: 0.45 },
-  deckCardOpen: { borderColor: palette.cyan },
+  deckCardOpen: { borderColor: palette.accent },
   deckIcon: { fontSize: 17 },
   deckLabel: { ...typeTokens.label, color: palette.ink },
   deckDescription: { ...typeTokens.caption, color: palette.inkMuted },
@@ -1255,7 +1252,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  targetChipActive: { borderColor: palette.cyan, backgroundColor: 'rgba(110,231,249,0.14)' },
+  targetChipActive: { borderColor: palette.accent, backgroundColor: 'rgba(78,157,180,0.14)' },
   targetChipText: { ...typeTokens.micro, color: palette.inkSoft, marginTop: 2 },
 
   dilemmaPrompt: { ...typeTokens.body, color: palette.ink, marginBottom: space.sm },
@@ -1275,14 +1272,14 @@ const styles = StyleSheet.create({
     minHeight: layout.minTouchTarget,
     justifyContent: 'center',
     paddingHorizontal: space.md,
-    borderRadius: radius.pill,
+    borderRadius: radius.xs,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: palette.border,
   },
-  filterChipActive: { backgroundColor: `${palette.cyan}26`, borderColor: `${palette.cyan}77` },
+  filterChipActive: { backgroundColor: `${palette.accent}26`, borderColor: `${palette.accent}77` },
   filterChipText: { ...typeTokens.micro, color: palette.inkMuted },
-  filterChipTextActive: { color: palette.cyan },
+  filterChipTextActive: { color: palette.accent },
   chronicleRow: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start', paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   chronicleIcon: { fontSize: 14 },
   chronicleText: { ...typeTokens.caption, color: palette.inkSoft },
@@ -1329,7 +1326,7 @@ const styles = StyleSheet.create({
   },
   reportName: { ...typeTokens.label, color: palette.ink },
   reportActionIcon: { fontSize: 12 },
-  reportAction: { ...typeTokens.caption, color: palette.cyan, fontWeight: '600' },
+  reportAction: { ...typeTokens.caption, color: palette.accent, fontWeight: '600' },
   reportThought: { ...typeTokens.caption, color: palette.inkSoft, fontStyle: 'italic', marginTop: 4 },
   reportReason: { ...typeTokens.micro, color: palette.inkMuted, marginTop: 3, fontWeight: '500', letterSpacing: 0 },
   needDeltaChip: {

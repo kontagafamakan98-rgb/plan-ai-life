@@ -7,6 +7,7 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   Modal,
@@ -28,14 +29,16 @@ import {
   type as typeTokens,
 } from '../theme';
 import { API_BASE } from '../game/api';
+import { glyph } from '../game/icons';
 import { useI18n } from '../game/i18n';
 import type { Ending, GameState, Identity, SupportInfo } from '../game/types';
+import { Icon } from './Icon';
 import {
   ActionButton,
   BodyText,
   IconButton,
   Panel,
-  Pill,
+  Tag,
   Row,
   SectionTitle,
   usePrefs,
@@ -108,12 +111,12 @@ export function CodexModal({
 
   return (
     <ModalShell visible={visible} title={t('codex.title')} subtitle={identity.brand.name} onClose={onClose}>
-      <Panel gradient={['rgba(110,231,249,0.12)', 'rgba(167,139,250,0.06)']} style={styles.block}>
-        <SectionTitle title={t('codex.premise')} icon="book-outline" />
+      <Panel tone={palette.accent} style={styles.block}>
+        <SectionTitle title={t('codex.premise')} icon="reader-outline" />
         <BodyText>{lt(identity.brand.premise)}</BodyText>
         <Row gap={6} style={{ marginTop: space.sm }} wrap>
-          <Pill label={`${t('app.role')} : ${lt(identity.brand.role)}`} color={palette.cyan} />
-          <Pill label={identity.anomaly.name} color={palette.rose} icon="🕳️" />
+          <Tag label={`${t('app.role')} : ${lt(identity.brand.role)}`} color={palette.accent} />
+          <Tag label={identity.anomaly.name} color={palette.rose} icon={glyph('anomaly')} />
         </Row>
       </Panel>
 
@@ -137,16 +140,16 @@ export function CodexModal({
       </Panel>
 
       <Panel style={styles.block}>
-        <SectionTitle title={t('codex.interventions')} icon="sparkles" />
+        <SectionTitle title={t('codex.interventions')} icon="flash-outline" />
         {identity.interventions.map((item) => (
           <View key={item.id} style={styles.interventionRow}>
-            <Text style={styles.interventionIcon}>{item.icon}</Text>
+            <Icon name={glyph(item.icon)} size={16} color={palette.inkSoft} />
             <View style={styles.goalText}>
               <Row gap={6} align="center">
                 <Text style={styles.goalLabel}>{lt(item.label)}</Text>
-                <Pill label={`${item.cost} ✦`} color={palette.flux} compact />
+                <Tag label={`${item.cost}`} icon={glyph('flux')} color={palette.flux} compact />
                 {item.chapter_min > 1 ? (
-                  <Pill label={t('common.chapterLock', { n: item.chapter_min })} color={palette.inkMuted} compact />
+                  <Tag label={t('common.chapterLock', { n: item.chapter_min })} color={palette.inkMuted} compact />
                 ) : null}
               </Row>
               <Text style={styles.goalMilestones}>{lt(item.description)}</Text>
@@ -159,9 +162,12 @@ export function CodexModal({
         <SectionTitle title={t('signatures.title')} icon="ribbon-outline" />
         {identity.signatures.map((signature) => (
           <Row key={signature.id} gap={space.sm} align="center" style={styles.signatureRow}>
-            <Text style={[styles.signatureIcon, !earned.has(signature.id) && { opacity: 0.3 }]}>
-              {earned.has(signature.id) ? signature.icon : '🔒'}
-            </Text>
+            <Icon
+              name={earned.has(signature.id) ? glyph(signature.icon) : 'lock-closed-outline'}
+              size={16}
+              color={earned.has(signature.id) ? palette.lime : palette.inkMuted}
+              style={!earned.has(signature.id) && styles.dimmedGlyph}
+            />
             <View style={styles.goalText}>
               <Text style={styles.goalLabel}>{lt(signature.label)}</Text>
               <Text style={styles.goalMilestones}>{lt(signature.hint)}</Text>
@@ -174,9 +180,12 @@ export function CodexModal({
         <SectionTitle title={t('codex.endings')} icon="moon-outline" />
         {identity.endings.map((ending) => (
           <Row key={ending.id} gap={space.sm} align="center" style={styles.signatureRow}>
-            <Text style={styles.signatureIcon}>
-              {(state?.ending?.id ?? '') === ending.id ? '🌒' : '•'}
-            </Text>
+            <Icon
+              name={glyph('ending')}
+              size={16}
+              color={(state?.ending?.id ?? '') === ending.id ? palette.accent : palette.inkMuted}
+              style={(state?.ending?.id ?? '') === ending.id ? undefined : styles.dimmedGlyph}
+            />
             <Text style={styles.goalLabel}>{lt(ending.title)}</Text>
           </Row>
         ))}
@@ -228,6 +237,7 @@ export function SettingsModal({
 }) {
   const { t, lang, setLang } = useI18n();
   const prefs = usePrefs();
+  const router = useRouter();
   const [importText, setImportText] = useState('');
   const [exported, setExported] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -254,7 +264,7 @@ export function SettingsModal({
           {(['fr', 'en'] as const).map((code) => (
             <ActionButton
               key={code}
-              label={code === 'fr' ? '🇫🇷 Français' : '🇬🇧 English'}
+              label={code === 'fr' ? 'Français' : 'English'}
               variant={lang === code ? 'primary' : 'secondary'}
               onPress={() => setLang(code)}
               compact
@@ -271,7 +281,7 @@ export function SettingsModal({
             value={prefs.reduceMotion}
             onValueChange={(value) => prefs.setPreference('reduceMotion', value)}
             accessibilityLabel={t('settings.reduceMotion')}
-            trackColor={{ true: palette.cyan, false: 'rgba(255,255,255,0.18)' }}
+            trackColor={{ true: palette.accent, false: 'rgba(255,255,255,0.18)' }}
             thumbColor={palette.ink}
           />
         </Row>
@@ -281,7 +291,7 @@ export function SettingsModal({
             value={prefs.contrast}
             onValueChange={(value) => prefs.setPreference('contrast', value)}
             accessibilityLabel={t('settings.contrast')}
-            trackColor={{ true: palette.cyan, false: 'rgba(255,255,255,0.18)' }}
+            trackColor={{ true: palette.accent, false: 'rgba(255,255,255,0.18)' }}
             thumbColor={palette.ink}
           />
         </Row>
@@ -291,7 +301,7 @@ export function SettingsModal({
             value={prefs.haptics}
             onValueChange={(value) => prefs.setPreference('haptics', value)}
             accessibilityLabel={t('settings.sound')}
-            trackColor={{ true: palette.cyan, false: 'rgba(255,255,255,0.18)' }}
+            trackColor={{ true: palette.accent, false: 'rgba(255,255,255,0.18)' }}
             thumbColor={palette.ink}
           />
         </Row>
@@ -306,7 +316,7 @@ export function SettingsModal({
               {exported.slice(0, 420)}
               {exported.length > 420 ? '…' : ''}
             </Text>
-            {copied ? <Pill label={t('common.copied')} color={palette.green} icon="checkmark" /> : null}
+            {copied ? <Tag label={t('common.copied')} color={palette.green} icon="checkmark" /> : null}
           </>
         ) : null}
       </Panel>
@@ -337,7 +347,7 @@ export function SettingsModal({
         />
       </Panel>
 
-      <Panel gradient={['rgba(251,113,133,0.14)', 'rgba(251,113,133,0.03)']} style={styles.block}>
+      <Panel tone={palette.danger} style={styles.block}>
         <SectionTitle title={t('settings.reset')} subtitle={t('settings.resetHint')} icon="refresh-outline" />
         <ActionButton
           label={t('settings.reset')}
@@ -355,6 +365,26 @@ export function SettingsModal({
             }
           }}
         />
+      </Panel>
+
+      <Panel style={styles.block}>
+        <SectionTitle title={t('legal.title')} subtitle={t('settings.about')} icon="document-text-outline" />
+        <Row gap={space.sm} wrap>
+          <ActionButton
+            label={t('legal.openGdpr')}
+            icon="document-text-outline"
+            variant="secondary"
+            compact
+            onPress={() => router.push('/legal/rgpd')}
+          />
+          <ActionButton
+            label={t('legal.openTerms')}
+            icon="document-text-outline"
+            variant="secondary"
+            compact
+            onPress={() => router.push('/legal/cgu')}
+          />
+        </Row>
       </Panel>
 
       <Panel style={styles.block}>
@@ -397,9 +427,12 @@ export function SupportModal({
     >
       {support ? (
         <>
-          <Panel gradient={['rgba(74,222,128,0.14)', 'rgba(110,231,249,0.05)']} style={styles.block}>
+          <Panel tone={palette.green} style={styles.block}>
             <SectionTitle title={t('support.principles')} icon="shield-checkmark-outline" />
             <BodyText>{lt(support.principles)}</BodyText>
+            <BodyText muted style={{ marginTop: space.sm }}>
+              {t('support.noPrice')}
+            </BodyText>
           </Panel>
 
           {support.offers.map((offer) => (
@@ -414,7 +447,14 @@ export function SupportModal({
                       ? 'library-outline'
                       : 'heart-outline'
                 }
-                right={<Pill label={offer.price_display} color={palette.amber} compact />}
+                right={
+                  <Tag
+                    label={t('support.notForSale')}
+                    icon={glyph('lock')}
+                    color={palette.inkMuted}
+                    compact
+                  />
+                }
               />
               <View style={styles.offerRow}>
                 <Text style={styles.offerLabel}>{t('support.grants')}</Text>
@@ -425,8 +465,8 @@ export function SupportModal({
                 <Text style={styles.offerValue}>{lt(offer.never_grants)}</Text>
               </View>
               <Row gap={6} style={{ marginTop: space.sm }} wrap>
-                <Pill label={t('support.disabled')} color={palette.rose} icon="lock-closed" />
-                {offer.one_time ? <Pill label={t('common.yes')} color={palette.green} compact /> : null}
+                <Tag label={t('support.disabled')} color={palette.rose} icon="lock-closed" />
+                {offer.one_time ? <Tag label={t('common.yes')} color={palette.green} compact /> : null}
               </Row>
             </Panel>
           ))}
@@ -464,7 +504,7 @@ export function EndingModal({
   const { t, lt } = useI18n();
   if (!ending) return null;
   const tone =
-    ending.id === 'drift' ? palette.rose : ending.id === 'awakening' ? palette.violet : palette.cyan;
+    ending.id === 'drift' ? palette.rose : ending.id === 'awakening' ? palette.steel : palette.accent;
 
   return (
     <ModalShell
@@ -473,7 +513,7 @@ export function EndingModal({
       subtitle={lt(ending.title)}
       onClose={onClose}
     >
-      <Panel gradient={[`${tone}22`, 'rgba(255,255,255,0.02)']} style={styles.block}>
+      <Panel tone={tone} style={styles.block}>
         <Text accessibilityRole="header" style={[styles.endingTitle, { color: tone }]}>
           {lt(ending.title)}
         </Text>
@@ -482,13 +522,13 @@ export function EndingModal({
 
       <Panel style={styles.block}>
         <Row wrap gap={space.md}>
-          <Stat label={t('ending.score')} value={`${ending.score}`} color={palette.cyan} />
+          <Stat label={t('ending.score')} value={`${ending.score}`} color={palette.accent} />
           <Stat
             label={t('ending.goals')}
             value={`${ending.goals_completed}/${ending.goals_total}`}
             color={palette.lime}
           />
-          <Stat label={t('ending.signatures')} value={`${ending.signatures.length}`} color={palette.violet} />
+          <Stat label={t('ending.signatures')} value={`${ending.signatures.length}`} color={palette.steel} />
           <Stat label={t('ending.lucidity')} value={`${Math.round(ending.lucidity)}`} color={lucidityColor(ending.lucidity)} />
           <Stat
             label={t('ending.stability')}
@@ -505,7 +545,7 @@ export function EndingModal({
         ) : (
           <Row wrap gap={6}>
             {ending.signatures.map((signature) => (
-              <Pill key={signature} label={signature} color={palette.lime} icon="★" compact />
+              <Tag key={signature} label={signature} color={palette.lime} icon={glyph(signature)} compact />
             ))}
           </Row>
         )}
@@ -533,7 +573,7 @@ function Stat({ label, value, color }: { label: string; value: string; color: st
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(3,4,12,0.88)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'rgba(8,10,13,0.88)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: '#0B0E26',
     borderTopLeftRadius: radius.xl,
@@ -564,9 +604,8 @@ const styles = StyleSheet.create({
   goalLabel: { ...typeTokens.label, color: palette.ink },
   goalMilestones: { ...typeTokens.caption, color: palette.inkMuted, marginTop: 1 },
   interventionRow: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start', marginBottom: 9 },
-  interventionIcon: { fontSize: 15 },
+  dimmedGlyph: { opacity: 0.34 },
   signatureRow: { marginBottom: 7 },
-  signatureIcon: { fontSize: 15, width: 20, textAlign: 'center' },
   offerRow: { flexDirection: 'row', gap: space.sm, marginTop: 5 },
   offerLabel: { ...typeTokens.micro, color: palette.inkMuted, textTransform: 'uppercase', width: 96 },
   offerValue: { ...typeTokens.caption, color: palette.inkSoft, flex: 1 },

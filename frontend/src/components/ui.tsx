@@ -7,9 +7,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import React, {
   createContext,
   useCallback,
@@ -34,6 +32,7 @@ import {
 } from 'react-native';
 
 import { elevation, layout, palette, radius, space, type } from '../theme';
+import { Icon, type IconName } from './Icon';
 
 /* ------------------------------------------------------------------ *
  * Preferences
@@ -187,7 +186,7 @@ export function useEntrance(delay = 0) {
     }
     const animation = Animated.timing(progress, {
       toValue: 1,
-      duration: 380,
+      duration: 260,
       delay,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
@@ -199,7 +198,7 @@ export function useEntrance(delay = 0) {
     opacity: progress,
     transform: [
       {
-        translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }),
+        translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }),
       },
     ],
   };
@@ -209,15 +208,20 @@ export function useEntrance(delay = 0) {
  * Layout primitives
  * ------------------------------------------------------------------ */
 
+/**
+ * A flat surface. Panels used to carry a two-colour gradient; they now carry a
+ * single tone bar on the left, which reads as an instrument label instead of
+ * decoration.
+ */
 export function Panel({
   children,
   style,
-  gradient,
+  tone,
   accessibilityLabel,
 }: {
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
-  gradient?: [string, string, ...string[]];
+  tone?: string;
   accessibilityLabel?: string;
 }) {
   const { contrast } = usePrefs();
@@ -229,13 +233,11 @@ export function Panel({
         accessibilityLabel={accessibilityLabel}
         style={[
           styles.panel,
+          tone ? { borderLeftWidth: 2, borderLeftColor: tone } : null,
           contrast && styles.panelContrast,
           elevation.card,
         ]}
       >
-        {gradient ? (
-          <LinearGradient colors={gradient} style={StyleSheet.absoluteFill} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} />
-        ) : null}
         {children}
       </View>
     </Animated.View>
@@ -250,13 +252,13 @@ export function SectionTitle({
 }: {
   title: string;
   subtitle?: string;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: IconName;
   right?: React.ReactNode;
 }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionHeaderLeft}>
-        {icon ? <Ionicons name={icon} size={16} color={palette.cyan} /> : null}
+        {icon ? <Icon name={icon} size={16} color={palette.accent} /> : null}
         <View style={styles.sectionHeaderText}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>
             {title}
@@ -269,7 +271,7 @@ export function SectionTitle({
   );
 }
 
-export function Pill({
+export function Tag({
   label,
   icon,
   color = palette.ink,
@@ -277,7 +279,7 @@ export function Pill({
   compact,
 }: {
   label: string;
-  icon?: string;
+  icon?: IconName;
   color?: string;
   background?: string;
   compact?: boolean;
@@ -285,13 +287,13 @@ export function Pill({
   return (
     <View
       style={[
-        styles.pill,
-        compact && styles.pillCompact,
+        styles.tag,
+        compact && styles.tagCompact,
         { borderColor: `${color}44`, backgroundColor: background ?? `${color}18` },
       ]}
     >
-      {icon ? <Text style={styles.pillIcon}>{icon}</Text> : null}
-      <Text style={[styles.pillText, { color }, compact && { fontSize: 10 }]} numberOfLines={1}>
+      {icon ? <Icon name={icon} size={13} color={color} /> : null}
+      <Text style={[styles.tagText, { color }, compact && { fontSize: 10 }]} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -310,7 +312,7 @@ export function Meter({
   label: string;
   value: number;
   color: string;
-  icon?: string;
+  icon?: IconName;
   delta?: number;
   testLabel?: string;
 }) {
@@ -341,10 +343,12 @@ export function Meter({
       accessibilityValue={{ min: 0, max: 100, now: Math.round(clamped) }}
     >
       <View style={styles.meterHead}>
-        <Text style={styles.meterLabel} numberOfLines={1}>
-          {icon ? `${icon} ` : ''}
-          {label}
-        </Text>
+        <View style={styles.meterLabelRow}>
+          {icon ? <Icon name={icon} size={13} color={palette.inkMuted} /> : null}
+          <Text style={styles.meterLabel} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
         <View style={styles.meterValueRow}>
           {delta !== undefined && Math.abs(delta) >= 0.5 ? (
             <Text style={[styles.meterDelta, { color: delta > 0 ? palette.good : palette.over }]}>
@@ -373,7 +377,7 @@ export function Meter({
   );
 }
 
-/** Circular goal indicator drawn as a ring of dots — precise and cheap. */
+/** Circular goal indicator drawn as a ring of dots: precise and cheap. */
 export function DotRing({
   progress,
   size = 46,
@@ -417,7 +421,7 @@ export function DotRing({
         );
       })}
       <Text style={[styles.ringText, complete && { color }]}>
-        {complete ? '★' : `${Math.round(progress)}`}
+        {complete ? <Icon name="checkmark" size={Math.round(size / 3)} color={color} /> : `${Math.round(progress)}`}
       </Text>
     </View>
   );
@@ -435,7 +439,7 @@ export function ActionButton({
   compact,
 }: {
   label: string;
-  icon?: keyof typeof Ionicons.glyphMap;
+  icon?: IconName;
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
   disabled?: boolean;
@@ -449,7 +453,7 @@ export function ActionButton({
   const press = useRef(new Animated.Value(1)).current;
 
   const paletteFor = {
-    primary: { bg: palette.cyan, fg: '#04202B', border: 'transparent' },
+    primary: { bg: palette.accent, fg: '#04202B', border: 'transparent' },
     secondary: { bg: palette.surfaceStrong, fg: palette.ink, border: palette.border },
     ghost: { bg: 'transparent', fg: palette.inkSoft, border: palette.border },
     danger: { bg: palette.rose, fg: '#2A0713', border: 'transparent' },
@@ -492,7 +496,7 @@ export function ActionButton({
           },
         ]}
       >
-        {icon ? <Ionicons name={icon} size={compact ? 15 : 17} color={paletteFor.fg} /> : null}
+        {icon ? <Icon name={icon} size={compact ? 15 : 17} color={paletteFor.fg} /> : null}
         <Text style={[styles.buttonText, compact && { fontSize: 12 }, { color: paletteFor.fg }]}>
           {busy ? '…' : label}
         </Text>
@@ -508,7 +512,7 @@ export function IconButton({
   active,
   tone = palette.ink,
 }: {
-  icon: keyof typeof Ionicons.glyphMap;
+  icon: IconName;
   onPress: () => void;
   accessibilityLabel: string;
   active?: boolean;
@@ -527,10 +531,10 @@ export function IconButton({
       }}
       style={[
         styles.iconButton,
-        active && { backgroundColor: `${palette.cyan}26`, borderColor: `${palette.cyan}66` },
+        active && { backgroundColor: `${palette.accent}26`, borderColor: `${palette.accent}66` },
       ]}
     >
-      <Ionicons name={icon} size={19} color={active ? palette.cyan : tone} />
+      <Icon name={icon} size={19} color={active ? palette.accent : tone} />
     </TouchableOpacity>
   );
 }
@@ -547,13 +551,13 @@ export function StatBlock({
   value: string;
   color: string;
   hint?: string;
-  icon?: string;
+  icon?: IconName;
   progress?: number;
 }) {
   return (
     <View style={styles.statBlock} accessible accessibilityLabel={`${label}: ${value}. ${hint ?? ''}`}>
       <View style={styles.statHead}>
-        {icon ? <Text style={styles.statIcon}>{icon}</Text> : null}
+        {icon ? <Icon name={icon} size={12} color={color} /> : null}
         <Text style={styles.statLabel}>{label}</Text>
       </View>
       <Text style={[styles.statValue, { color }]}>{value}</Text>
@@ -564,7 +568,7 @@ export function StatBlock({
               height: '100%',
               width: `${Math.max(0, Math.min(100, progress))}%`,
               backgroundColor: color,
-              borderRadius: radius.pill,
+              borderRadius: radius.xs,
             }}
           />
         </View>
@@ -668,34 +672,34 @@ export const styles = StyleSheet.create({
   sectionTitle: { ...type.title, color: palette.ink },
   sectionSubtitle: { ...type.caption, color: palette.inkMuted, marginTop: 1 },
 
-  pill: {
+  tag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     paddingHorizontal: space.sm,
     paddingVertical: 4,
-    borderRadius: radius.pill,
+    borderRadius: radius.xs,
     borderWidth: 1,
     alignSelf: 'flex-start',
   },
-  pillCompact: { paddingHorizontal: 6, paddingVertical: 2 },
-  pillIcon: { fontSize: 11 },
-  pillText: { ...type.caption, fontWeight: '700' },
+  tagCompact: { paddingHorizontal: 6, paddingVertical: 2 },
+  tagText: { ...type.caption, fontWeight: '600' },
 
   meterRow: { marginBottom: space.sm },
   meterHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  meterLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
   meterLabel: { ...type.caption, color: palette.inkSoft, flexShrink: 1 },
   meterValueRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   meterValue: { ...type.caption, color: palette.ink, fontWeight: '700' },
   meterDelta: { ...type.caption, fontWeight: '700' },
   meterTrack: {
     height: 5,
-    borderRadius: radius.pill,
+    borderRadius: radius.xs,
     backgroundColor: 'rgba(255,255,255,0.10)',
     marginTop: 4,
     overflow: 'hidden',
   },
-  meterFill: { height: '100%', borderRadius: radius.pill },
+  meterFill: { height: '100%', borderRadius: radius.xs },
 
   ring: { alignItems: 'center', justifyContent: 'center' },
   ringText: { ...type.caption, color: palette.ink, fontWeight: '800' },
@@ -725,12 +729,11 @@ export const styles = StyleSheet.create({
 
   statBlock: { flex: 1, minWidth: 84 },
   statHead: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statIcon: { fontSize: 12 },
   statLabel: { ...type.micro, color: palette.inkMuted, textTransform: 'uppercase' },
   statValue: { ...type.display, marginTop: 2 },
   statTrack: {
     height: 3,
-    borderRadius: radius.pill,
+    borderRadius: radius.xs,
     backgroundColor: 'rgba(255,255,255,0.12)',
     marginTop: 5,
     overflow: 'hidden',

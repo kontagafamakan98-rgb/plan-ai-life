@@ -1,5 +1,5 @@
 // Icon font loader for Expo apps. Fonts are loaded from a CDN only under
-// Expo Go (StoreClient) — that's where @expo/vector-icons' .ttf files come
+// Expo Go (StoreClient): that's where @expo/vector-icons' .ttf files come
 // back as 0 bytes from Metro's asset resolver on Android. Native dev/prod
 // builds and web pass an empty map, so useFonts resolves to [true, null]
 // immediately via react-native-vector-icons autolinking / web stubs.

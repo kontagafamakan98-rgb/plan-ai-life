@@ -243,7 +243,8 @@ export interface SupportOffer {
   kind: 'cosmetic' | 'content' | 'tip';
   name: Localized;
   description: Localized;
-  price_display: string;
+  /** Nothing is purchasable yet, so no price is announced anywhere. */
+  availability: 'not_for_sale';
   one_time: boolean;
   grants: Localized;
   never_grants: Localized;
@@ -290,7 +291,8 @@ export interface LocationView {
   type: string;
   city: string;
   country: string;
-  emoji: string;
+  /** Semantic key resolved to a vector glyph by src/game/icons.ts. */
+  icon: string;
   available_actions: string[];
   objects: string[];
   is_premium?: boolean;

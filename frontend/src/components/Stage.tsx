@@ -1,9 +1,9 @@
 /**
- * Stage — the place the Watcher is looking at right now.
+ * Stage: the place the Watcher is looking at right now.
  *
- * Layers, back to front: sky (hour-driven) → celestial body → clouds/stars →
- * back wall → floor → scenery props → residents (depth-sorted by their floor
- * position) → interface overlays. Everything is plain views, so it renders
+ * Layers, back to front: sky (hour-driven), celestial body, clouds and stars,
+ * back wall, floor, scenery props, residents (depth-sorted by their floor
+ * position), interface overlays. Everything is plain views, so it renders
  * identically on web, iOS and Android.
  */
 
@@ -31,7 +31,9 @@ import {
 import type { DimensionValue } from 'react-native';
 
 import type { LocationView, Resident } from '../game/types';
+import { glyph } from '../game/icons';
 import { useI18n } from '../game/i18n';
+import { Icon } from './Icon';
 import { usePrefs } from './ui';
 import { ResidentSprite } from './ResidentSprite';
 
@@ -228,8 +230,8 @@ function SceneryProp({ prop, accent }: { prop: Prop; accent: string }) {
         <View style={[styles.prop, base]}>
           <View style={[styles.shelf, { borderColor: `${accent}77` }]}>
             <View style={[styles.shelfBook, { backgroundColor: accent }]} />
-            <View style={[styles.shelfBook, { backgroundColor: palette.violet, width: 5 }]} />
-            <View style={[styles.shelfBook, { backgroundColor: palette.cyan, width: 4 }]} />
+            <View style={[styles.shelfBook, { backgroundColor: palette.steel, width: 5 }]} />
+            <View style={[styles.shelfBook, { backgroundColor: palette.accent, width: 4 }]} />
           </View>
         </View>
       );
@@ -412,13 +414,8 @@ export function Stage({
           ))
         : null}
 
-      {/* Back wall */}
-      <LinearGradient
-        colors={room.wall as [string, string]}
-        style={[styles.wall, { height: size.height * 0.46 }]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-      >
+      {/* Back wall: one flat material colour, no gradient wash. */}
+      <View style={[styles.wall, { height: size.height * 0.46, backgroundColor: room.wall[0] }]}>
         <View style={[styles.wallAccent, { backgroundColor: room.accent }]} />
         {[0.2, 0.42, 0.64, 0.86].map((fraction) => (
           <View
@@ -426,7 +423,7 @@ export function Stage({
             style={[styles.wallSeam, { left: `${fraction * 100}%` }]}
           />
         ))}
-      </LinearGradient>
+      </View>
 
       {/* Floor */}
       <View style={[styles.floor, { backgroundColor: room.floor, height: size.height * 0.56 }]}>
@@ -494,7 +491,7 @@ export function Stage({
             />
           ))}
           <View style={styles.anomalyTag}>
-            <Text style={styles.anomalyGlyph}>🕳️</Text>
+            <Icon name={glyph('anomaly')} size={16} color={palette.rose} />
             <View style={styles.anomalyTextWrap}>
               <Text style={styles.anomalyName}>{anomalyName ?? 'RÉSIDU-08'}</Text>
               <Text style={styles.anomalyText} numberOfLines={2}>
@@ -520,14 +517,18 @@ export function Stage({
       <View style={styles.topBar}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${t('stage.place')}: ${location?.name ?? '—'}. ${t('common.tapToSelect')}`}
+          accessibilityLabel={`${t('stage.place')}: ${location?.name ?? t('places.unknown')}. ${t('common.tapToSelect')}`}
           onPress={onOpenLocationPicker}
           style={styles.placeChip}
         >
-          <Text style={styles.placeEmoji}>{location?.emoji ?? '🌐'}</Text>
+          <Icon
+            name={glyph(location?.icon ?? location?.type)}
+            size={16}
+            color={palette.inkSoft}
+          />
           <View style={styles.placeText}>
             <Text style={styles.placeName} numberOfLines={1}>
-              {location?.name ?? '—'}
+              {location?.name ?? t('places.unknown')}
             </Text>
             <Text style={styles.placeCity} numberOfLines={1}>
               {[location?.city, location?.country].filter(Boolean).join(', ')}
@@ -546,9 +547,8 @@ export function Stage({
           </View>
           {weatherIcon ? (
             <View style={styles.statusChip}>
-              <Text style={styles.statusChipText}>
-                {weatherIcon} {weatherLabel}
-              </Text>
+              <Icon name={glyph(weatherIcon)} size={11} color={palette.inkSoft} />
+              <Text style={styles.statusChipText}>{weatherLabel}</Text>
             </View>
           ) : null}
           <View style={styles.statusChip}>
@@ -560,7 +560,7 @@ export function Stage({
 
       {/* Vignette */}
       <LinearGradient
-        colors={['rgba(3,4,12,0.55)', 'transparent', 'rgba(3,4,12,0.62)']}
+        colors={['rgba(8,10,13,0.55)', 'transparent', 'rgba(8,10,13,0.62)']}
         locations={[0, 0.45, 1]}
         style={styles.vignette}
         pointerEvents="none"
@@ -618,7 +618,7 @@ const styles = StyleSheet.create({
   benchBack: { width: 46, height: 4, backgroundColor: 'rgba(0,0,0,0.30)', marginTop: 3, borderRadius: 2 },
   machineBody: { width: 26, height: 36, borderRadius: 5, borderWidth: 2, backgroundColor: 'rgba(10,12,26,0.75)', alignItems: 'flex-end', padding: 4 },
   machineLight: { width: 6, height: 6, borderRadius: 3 },
-  screen: { width: 58, height: 34, borderRadius: 4, borderWidth: 2, backgroundColor: 'rgba(8,10,24,0.88)', overflow: 'hidden' },
+  screen: { width: 58, height: 34, borderRadius: 4, borderWidth: 2, backgroundColor: 'rgba(12,15,19,0.88)', overflow: 'hidden' },
   screenGlow: { flex: 1 },
   screenStand: { width: 12, height: 6, backgroundColor: 'rgba(0,0,0,0.4)', marginLeft: 23, borderBottomLeftRadius: 3, borderBottomRightRadius: 3 },
   shelf: { width: 34, height: 44, borderRadius: 4, borderWidth: 2, backgroundColor: 'rgba(0,0,0,0.28)', padding: 3, flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
@@ -648,25 +648,25 @@ const styles = StyleSheet.create({
 
   anomalyLayer: { ...StyleSheet.absoluteFillObject },
   anomalyLine: { position: 'absolute', left: 0, right: 0, height: 2, backgroundColor: '#FF5FA2' },
-  anomalyTag: { position: 'absolute', bottom: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(24,4,16,0.82)', borderWidth: 1, borderColor: 'rgba(255,95,162,0.6)', borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 6, maxWidth: '72%' },
-  anomalyGlyph: { fontSize: 16 },
+  anomalyTag: { position: 'absolute', bottom: 12, left: 12, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(14,10,11,0.82)', borderWidth: 1, borderColor: 'rgba(201,154,69,0.6)', borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 6, maxWidth: '72%' },
+
   anomalyTextWrap: { flexShrink: 1 },
   anomalyName: { ...typeTokens.micro, color: '#FF9EC4', letterSpacing: 1.2 },
   anomalyText: { ...typeTokens.caption, color: palette.inkSoft },
 
   emptyWrap: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
-  emptyCard: { alignItems: 'center', gap: 4, backgroundColor: 'rgba(4,6,18,0.7)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.lg, paddingHorizontal: space.lg, paddingVertical: space.md, maxWidth: 300 },
+  emptyCard: { alignItems: 'center', gap: 4, backgroundColor: 'rgba(9,11,15,0.7)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.lg, paddingHorizontal: space.lg, paddingVertical: space.md, maxWidth: 300 },
   emptyTitle: { ...type.title, color: palette.ink, fontSize: 14 },
   emptyHint: { ...type.caption, color: palette.inkMuted, textAlign: 'center' },
 
   topBar: { position: 'absolute', top: 10, left: 10, right: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 },
-  placeChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(4,6,18,0.74)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 7, maxWidth: '60%' },
-  placeEmoji: { fontSize: 18 },
+  placeChip: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(9,11,15,0.74)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.md, paddingHorizontal: 10, paddingVertical: 7, maxWidth: '60%' },
+
   placeText: { flexShrink: 1 },
   placeName: { ...type.label, color: palette.ink },
   placeCity: { ...type.micro, color: palette.inkMuted, fontWeight: '500', letterSpacing: 0 },
   statusChips: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' },
-  statusChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(4,6,18,0.74)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 4 },
+  statusChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(9,11,15,0.74)', borderWidth: 1, borderColor: palette.border, borderRadius: radius.xs, paddingHorizontal: 8, paddingVertical: 4 },
   statusChipText: { ...type.micro, color: palette.inkSoft, letterSpacing: 0.3 },
 
   vignette: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },

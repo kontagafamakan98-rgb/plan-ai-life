@@ -183,7 +183,7 @@ export function useGame(translations: {
         setState(payload.state);
         notify(
           payload.result.resisted
-            ? `${t('deck.applied')} — ${t('deck.resisted')}`
+            ? `${t('deck.applied')}: ${t('deck.resisted')}`
             : t('toast.intervention'),
           payload.result.resisted ? 'info' : 'good',
         );

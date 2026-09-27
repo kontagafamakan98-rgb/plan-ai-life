@@ -1,5 +1,5 @@
 /**
- * ResidentSprite — original character art, drawn entirely with plain views.
+ * ResidentSprite: original character art, drawn entirely with plain views.
  *
  * The previous version of this project represented people as an emoji on a
  * circle. This renders each resident as a layered figure whose silhouette,
@@ -14,8 +14,10 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { palette, radius, type } from '../theme';
+import { glyph } from '../game/icons';
 import { useI18n } from '../game/i18n';
 import type { Resident } from '../game/types';
+import { Icon } from './Icon';
 import { usePrefs } from './ui';
 
 const BASE_WIDTH = 92;
@@ -219,7 +221,7 @@ export function ResidentSprite({
   };
   const outfit = look.outfit ?? { top: '#5AB0F0', bottom: '#2E3440', accent: '#FFD166' };
   const mood = MOOD_SHAPES[resident.mood] ?? MOOD_SHAPES.neutral;
-  const moodColor = resident.mood_color ?? palette.cyan;
+  const moodColor = resident.mood_color ?? palette.accent;
 
   // Idle bob + breathing.
   useEffect(() => {
@@ -335,7 +337,7 @@ export function ResidentSprite({
           <View style={[sprite.column, { height: BASE_HEIGHT - 24 }]}>
             {/* Mood badge */}
             <View style={[sprite.moodBadge, { borderColor: `${moodColor}88` }]}>
-              <Text style={sprite.moodGlyph}>{resident.mood_icon ?? '•'}</Text>
+              <Icon name={glyph(resident.mood_icon)} size={12} color={moodColor} />
             </View>
 
             {/* Head */}
@@ -435,7 +437,7 @@ export function ResidentSprite({
           {/* Action bubble */}
           {resident.current_action?.icon ? (
             <View style={sprite.actionBubble}>
-              <Text style={sprite.actionIcon}>{resident.current_action.icon}</Text>
+              <Icon name={glyph(resident.current_action.icon)} size={14} color={palette.ink} />
             </View>
           ) : null}
 
@@ -444,8 +446,8 @@ export function ResidentSprite({
             <View
               style={[
                 sprite.nameTag,
-                contrast && { backgroundColor: 'rgba(4,6,18,0.92)', borderColor: palette.borderStrong },
-                selected && { borderColor: palette.cyan, backgroundColor: 'rgba(110,231,249,0.20)', borderWidth: 1.5 },
+                contrast && { backgroundColor: 'rgba(9,11,15,0.92)', borderColor: palette.borderStrong },
+                selected && { borderColor: palette.accent, backgroundColor: 'rgba(78,157,180,0.20)', borderWidth: 1.5 },
               ]}
             >
               <Text style={sprite.nameText} numberOfLines={1}>
@@ -517,8 +519,8 @@ const sprite = StyleSheet.create({
   shadow: { position: 'absolute', bottom: 0, width: 42, height: 9, borderRadius: 22, backgroundColor: 'rgba(0,0,0,0.30)' },
   column: { alignItems: 'center', justifyContent: 'flex-end' },
 
-  moodBadge: { position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10, borderWidth: 1, backgroundColor: 'rgba(6,9,22,0.82)', alignItems: 'center', justifyContent: 'center' },
-  moodGlyph: { fontSize: 11 },
+  moodBadge: { position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10, borderWidth: 1, backgroundColor: 'rgba(11,13,16,0.82)', alignItems: 'center', justifyContent: 'center' },
+
 
   headWrap: { width: 50, height: 48, alignItems: 'center', justifyContent: 'flex-start', marginBottom: -2 },
   head: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: 'rgba(0,0,0,0.20)', alignItems: 'center', overflow: 'hidden' },
@@ -551,8 +553,8 @@ const sprite = StyleSheet.create({
   leg: { width: 10, height: 22, borderRadius: 6, borderWidth: 1.6, borderColor: 'rgba(0,0,0,0.16)' },
   shoe: { width: 12, height: 7, borderRadius: 5, marginTop: -2, marginLeft: -1 },
 
-  actionBubble: { position: 'absolute', top: 6, left: -14, backgroundColor: 'rgba(6,9,22,0.86)', borderWidth: 1, borderColor: palette.border, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
-  actionIcon: { fontSize: 14 },
-  nameTag: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: radius.pill, backgroundColor: 'rgba(6,9,22,0.80)', borderWidth: 1, borderColor: palette.border, maxWidth: 86 },
+  actionBubble: { position: 'absolute', top: 6, left: -14, backgroundColor: 'rgba(11,13,16,0.86)', borderWidth: 1, borderColor: palette.border, width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+
+  nameTag: { marginTop: 5, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: radius.xs, backgroundColor: 'rgba(11,13,16,0.80)', borderWidth: 1, borderColor: palette.border, maxWidth: 86 },
   nameText: { ...type.micro, color: palette.ink, letterSpacing: 0.3 },
 });
