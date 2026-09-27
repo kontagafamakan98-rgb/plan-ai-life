@@ -152,22 +152,6 @@ export default function ArcadiaScreen() {
     });
   }, [state, focusedLocation]);
 
-  // Anyone who changed room since the previous cycle is drawn walking.
-  const [walkingIds, setWalkingIds] = useState<string[]>([]);
-  const previousLocations = useRef<Record<string, string>>({});
-  useEffect(() => {
-    if (!state) return;
-    const moved: string[] = [];
-    const next: Record<string, string> = {};
-    for (const resident of state.residents) {
-      const before = previousLocations.current[resident.id];
-      if (before && before !== resident.location_id) moved.push(resident.id);
-      next[resident.id] = resident.location_id;
-    }
-    previousLocations.current = next;
-    setWalkingIds(moved);
-  }, [state]);
-
   const selectedResident = useMemo(
     () => state?.residents.find((resident) => resident.id === game.selectedResidentId) ?? null,
     [state, game.selectedResidentId],
@@ -367,7 +351,7 @@ export default function ArcadiaScreen() {
                 selectedResidentId={game.selectedResidentId}
                 onSelectResident={openResident}
                 onOpenLocationPicker={() => setPlacesOpen(true)}
-                walkingIds={walkingIds}
+                cycle={state.cycle}
               />
 
               <CycleControl

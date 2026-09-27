@@ -20,7 +20,7 @@ import { withAlpha } from '../game/art';
 import { glyph } from '../game/icons';
 import { useI18n } from '../game/i18n';
 import type { Resident } from '../game/types';
-import { BUST_REGION, EYE_REGION, Figure, FigureEyes, moodOf } from './Figure';
+import { BUST_REGION, EYE_REGION, Figure, FigureEyes, moodOf, type Stride } from './Figure';
 import { Icon } from './Icon';
 import { usePrefs } from './ui';
 
@@ -36,7 +36,8 @@ interface Props {
   scale?: number;
   selected?: boolean;
   highlighted?: boolean;
-  walking?: boolean;
+  /** Where the body is in its step, when it is walking. */
+  stride?: Stride | null;
   onPress?: (resident: Resident) => void;
   showName?: boolean;
   accessibilityHint?: string;
@@ -49,7 +50,7 @@ export function ResidentSprite({
   scale = 1,
   selected,
   highlighted,
-  walking,
+  stride,
   onPress,
   showName = true,
   accessibilityHint,
@@ -61,7 +62,6 @@ export function ResidentSprite({
   const breathe = useRef(new Animated.Value(0)).current;
   const blink = useRef(new Animated.Value(1)).current;
   const glow = useRef(new Animated.Value(0)).current;
-  const walk = useRef(new Animated.Value(0)).current;
 
   const mood = moodOf(resident);
   const moodColor = resident.mood_color ?? palette.accent;
@@ -113,22 +113,6 @@ export function ResidentSprite({
     };
   }, [blink, reduceMotion]);
 
-  // Walking bob when the resident is relocating.
-  useEffect(() => {
-    if (!walking || reduceMotion) {
-      walk.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(walk, { toValue: 1, duration: 180, useNativeDriver: true }),
-        Animated.timing(walk, { toValue: 0, duration: 180, useNativeDriver: true }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [walk, walking, reduceMotion]);
-
   // Pulse when an intervention lands on this resident.
   useEffect(() => {
     if (!highlighted || reduceMotion) {
@@ -145,10 +129,7 @@ export function ResidentSprite({
     return () => loop.stop();
   }, [glow, highlighted, reduceMotion]);
 
-  const translateY = Animated.add(
-    bob.interpolate({ inputRange: [0, 1], outputRange: [0, -2.4] }),
-    walk.interpolate({ inputRange: [0, 1], outputRange: [0, -2.8] }),
-  );
+  const translateY = bob.interpolate({ inputRange: [0, 1], outputRange: [0, -2.4] });
   const breath = breathe.interpolate({ inputRange: [0, 1], outputRange: [1, 1.008] });
   const auraOpacity = highlighted
     ? glow.interpolate({ inputRange: [0, 1], outputRange: [0.12, 0.42] })
@@ -171,7 +152,7 @@ export function ResidentSprite({
         />
 
         <Animated.View style={[sprite.box, { transform: [{ translateY }, { scaleY: breath }] }]}>
-          <Figure resident={resident} light={light} withEyes={false} />
+          <Figure resident={resident} light={light} withEyes={false} stride={stride ?? undefined} />
 
           {/* The eyes ride in their own layer, so they can blink. */}
           <Animated.View

@@ -34,140 +34,20 @@ import {
   skyGradient,
   space,
   type as typeTokens,
-  world,
-} from '../theme';
+  world,  } from '../theme';
 import { ambientLight, mix, warmLight, warmShade, withAlpha } from '../game/art';
 import type { LocationView, Resident } from '../game/types';
 import { glyph } from '../game/icons';
 import { useI18n } from '../game/i18n';
 import { Icon } from './Icon';
 import { usePrefs } from './ui';
-import {
-  ResidentSprite,
-  SPRITE_BASE_WIDTH,
-  SPRITE_BASE_HEIGHT,
-  SPRITE_GROUND_INSET,
-} from './ResidentSprite';
-import { PROP_BOX, SceneryPropArt, type PropKind } from './Scenery';
+import { PROP_BOX, SceneryPropArt } from './Scenery';
 import { Dust, ForegroundFrame, HourGrade, SunBloom, Vignette, WallDressing } from './Atmosphere';
 import { Room, depthScaleAt, floorXAt, floorYAt, geometryOf } from './Room';
+import { stationsOf, type Station } from '../game/stations';
+import { useCirculation } from './useCirculation';
+import { Walker } from './Walker';
 
-interface Prop {
-  kind: PropKind;
-  x: number; // 0..1 across the room
-  y: number; // 0..1 down the floor
-  size?: number;
-}
-
-const SCENERY: Record<string, Prop[]> = {
-  cafe: [
-    { kind: 'counter', x: 0.2, y: 0.16 },
-    { kind: 'machine', x: 0.06, y: 0.12 },
-    { kind: 'table', x: 0.68, y: 0.42 },
-    { kind: 'table', x: 0.32, y: 0.62 },
-    { kind: 'plant', x: 0.9, y: 0.22 },
-    { kind: 'lamp', x: 0.54, y: 0.06 },
-  ],
-  apartment: [
-    { kind: 'bed', x: 0.18, y: 0.26 },
-    { kind: 'sofa', x: 0.68, y: 0.56 },
-    { kind: 'shelf', x: 0.88, y: 0.14 },
-    { kind: 'plant', x: 0.4, y: 0.14 },
-    { kind: 'lamp', x: 0.52, y: 0.48 },
-  ],
-  office: [
-    { kind: 'desk', x: 0.18, y: 0.28 },
-    { kind: 'desk', x: 0.64, y: 0.28 },
-    { kind: 'plant', x: 0.88, y: 0.6 },
-    { kind: 'shelf', x: 0.06, y: 0.5 },
-    { kind: 'mat', x: 0.44, y: 0.82 },
-  ],
-  park: [
-    { kind: 'tree', x: 0.12, y: 0.2 },
-    { kind: 'tree', x: 0.86, y: 0.26 },
-    { kind: 'bench', x: 0.46, y: 0.58 },
-    { kind: 'plant', x: 0.3, y: 0.76 },
-    { kind: 'stones', x: 0.68, y: 0.86 },
-  ],
-  gym: [
-    { kind: 'machine', x: 0.14, y: 0.24 },
-    { kind: 'machine', x: 0.34, y: 0.24 },
-    { kind: 'bench', x: 0.7, y: 0.44 },
-    { kind: 'mat', x: 0.24, y: 0.76 },
-    { kind: 'mat', x: 0.64, y: 0.84 },
-  ],
-  restaurant: [
-    { kind: 'table', x: 0.2, y: 0.3 },
-    { kind: 'table', x: 0.68, y: 0.38 },
-    { kind: 'counter', x: 0.46, y: 0.1 },
-    { kind: 'plant', x: 0.9, y: 0.68 },
-    { kind: 'lamp', x: 0.36, y: 0.64 },
-  ],
-  club: [
-    { kind: 'stage', x: 0.5, y: 0.14 },
-    { kind: 'machine', x: 0.16, y: 0.58 },
-    { kind: 'lamp', x: 0.26, y: 0.3 },
-    { kind: 'lamp', x: 0.74, y: 0.3 },
-    { kind: 'mat', x: 0.5, y: 0.72 },
-  ],
-  beach: [
-    { kind: 'water', x: 0.5, y: 0.06 },
-    { kind: 'tree', x: 0.12, y: 0.5 },
-    { kind: 'bench', x: 0.76, y: 0.58 },
-    { kind: 'stones', x: 0.4, y: 0.8 },
-    { kind: 'stones', x: 0.62, y: 0.9 },
-  ],
-  school: [
-    { kind: 'desk', x: 0.22, y: 0.32 },
-    { kind: 'desk', x: 0.5, y: 0.32 },
-    { kind: 'desk', x: 0.78, y: 0.32 },
-    { kind: 'shelf', x: 0.12, y: 0.7 },
-    { kind: 'mat', x: 0.62, y: 0.76 },
-  ],
-  hospital: [
-    { kind: 'bed', x: 0.2, y: 0.3 },
-    { kind: 'bed', x: 0.6, y: 0.3 },
-    { kind: 'machine', x: 0.88, y: 0.26 },
-    { kind: 'mat', x: 0.44, y: 0.8 },
-  ],
-  market: [
-    { kind: 'counter', x: 0.18, y: 0.28 },
-    { kind: 'counter', x: 0.62, y: 0.28 },
-    { kind: 'shelf', x: 0.9, y: 0.5 },
-    { kind: 'plant', x: 0.3, y: 0.72 },
-    { kind: 'stones', x: 0.72, y: 0.84 },
-  ],
-  museum: [
-    { kind: 'altar', x: 0.3, y: 0.28 },
-    { kind: 'altar', x: 0.7, y: 0.28 },
-    { kind: 'stones', x: 0.14, y: 0.74 },
-    { kind: 'plant', x: 0.88, y: 0.72 },
-  ],
-  cinema: [
-    { kind: 'screen', x: 0.5, y: 0.08, size: 1.35 },
-    { kind: 'bench', x: 0.26, y: 0.5 },
-    { kind: 'bench', x: 0.74, y: 0.5 },
-    { kind: 'bench', x: 0.5, y: 0.82 },
-  ],
-  temple: [
-    { kind: 'altar', x: 0.5, y: 0.24, size: 1.25 },
-    { kind: 'stones', x: 0.18, y: 0.74 },
-    { kind: 'stones', x: 0.8, y: 0.74 },
-    { kind: 'plant', x: 0.6, y: 0.86 },
-  ],
-  mountain: [
-    { kind: 'stones', x: 0.2, y: 0.32 },
-    { kind: 'stones', x: 0.7, y: 0.42 },
-    { kind: 'tree', x: 0.88, y: 0.56 },
-    { kind: 'stones', x: 0.44, y: 0.82 },
-  ],
-};
-
-const DEFAULT_SCENERY: Prop[] = [
-  { kind: 'plant', x: 0.18, y: 0.3 },
-  { kind: 'bench', x: 0.6, y: 0.5 },
-  { kind: 'stones', x: 0.36, y: 0.8 },
-];
 
 /** Rooms the Watcher sees from outside: sky and horizon instead of a wall. */
 const OUTDOOR = new Set(['park', 'beach', 'mountain', 'market']);
@@ -711,14 +591,17 @@ function SceneryProp({
   left,
   bottom,
   scale,
+  depth,
 }: {
-  prop: Prop;
+  prop: Station;
   accent: string;
   trim: string;
   index: number;
   left: number;
   bottom: number;
   scale: number;
+  /** Where the prop stands, so a resident can stand in front of it, or behind. */
+  depth: number;
 }) {
   const box = PROP_BOX[prop.kind] ?? PROP_BOX.table;
   const size = (prop.size ?? 1) * scale;
@@ -731,6 +614,7 @@ function SceneryProp({
     marginLeft: -box.w / 2,
     transform: [{ scale: size }],
     transformOrigin: 'bottom center',
+    zIndex: 10 + Math.round(depth * 1000),
   };
 
   return (
@@ -756,7 +640,8 @@ interface StageProps {
   selectedResidentId?: string | null;
   onSelectResident?: (resident: Resident) => void;
   onOpenLocationPicker?: () => void;
-  walkingIds?: string[];
+  /** The cycle the room is in: it is what changes what everyone is doing. */
+  cycle?: number;
 }
 
 export function Stage({
@@ -771,7 +656,7 @@ export function Stage({
   selectedResidentId,
   onSelectResident,
   onOpenLocationPicker,
-  walkingIds = [],
+  cycle = 0,
 }: StageProps) {
   const { t } = useI18n();
   const { contrast } = usePrefs();
@@ -780,7 +665,7 @@ export function Stage({
   const type = location?.type ?? '';
   const room = roomPalette[type] ?? defaultRoom;
   const outdoor = OUTDOOR.has(type);
-  const scenery = useMemo(() => SCENERY[type] ?? DEFAULT_SCENERY, [type]);
+  const scenery = useMemo(() => stationsOf(type), [type]);
   const openings = useMemo(() => (outdoor ? [] : WINDOWS[type] ?? []), [outdoor, type]);
 
   const isNight = gameHour < 6 || gameHour >= 20;
@@ -824,12 +709,13 @@ export function Stage({
     };
   };
 
-  // Residents are depth-sorted so someone standing lower on the floor is drawn
-  // in front of someone further back.
-  const sorted = useMemo(
-    () => [...residents].sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0)),
-    [residents],
-  );
+  // Who is where, and how they got there: routes, steps, entrances and exits.
+  const { walkers, report } = useCirculation({
+    residents,
+    type,
+    cycle,
+    locationId: location?.id ?? null,
+  });
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -954,44 +840,29 @@ export function Stage({
               left={spot.cx}
               bottom={size.height - spot.cy}
               scale={spot.scale * spriteScale}
+              depth={prop.y}
             />
           );
         })}
       </View>
 
-      {/* Residents */}
-      {sorted.map((resident, index) => {
-        const depthY = resident.position?.y ?? 0.5;
-        const spot = place(resident.position?.x ?? 0.5, depthY);
-        // Someone standing closer to the viewer is drawn bigger and in front.
-        const scale = spriteScale * spot.scale;
-        const boxWidth = SPRITE_BASE_WIDTH * scale;
-        return (
-          <View
-            key={resident.id}
-            testID={`stage-resident-${resident.id}`}
-            style={[
-              styles.residentSlot,
-              {
-                left: spot.cx - boxWidth / 2,
-                top: spot.cy - (SPRITE_BASE_HEIGHT - SPRITE_GROUND_INSET) * scale,
-                width: boxWidth,
-                zIndex: 100 + Math.round(depthY * 1000) + index,
-              },
-            ]}
-          >
-            <ResidentSprite
-              resident={resident}
-              scale={scale}
-              selected={selectedResidentId === resident.id}
-              walking={walkingIds.includes(resident.id)}
-              light={ambient.intensity}
-              onPress={onSelectResident}
-              accessibilityHint={t('common.tapToSelect')}
-            />
-          </View>
-        );
-      })}
+      {/* Residents: each one walks its own route, and repaints only itself. */}
+      {walkers.map((walker) => (
+        <Walker
+          key={walker.resident.id}
+          resident={walker.resident}
+          plan={walker.plan}
+          rest={walker.rest}
+          leaving={walker.leaving}
+          place={place}
+          spriteScale={spriteScale}
+          selected={selectedResidentId === walker.resident.id}
+          light={ambient.intensity}
+          onPress={onSelectResident}
+          accessibilityHint={t('common.tapToSelect')}
+          onReport={report}
+        />
+      ))}
 
       {/* Air: dust drifting through the room light. */}
       <Dust width={size.width} height={size.height} intensity={ambient.intensity} />

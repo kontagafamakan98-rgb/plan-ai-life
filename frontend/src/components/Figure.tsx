@@ -790,18 +790,20 @@ function Accessory({ build, colours, kind, accent, id }: PartProps & { kind: str
  * ------------------------------------------------------------------ */
 
 /** The spine of one arm, from the shoulder through the elbow to the wrist. */
-function armSpine(build: Build, side: 1 | -1): Node[] {
+function armSpine(build: Build, side: 1 | -1, walking = false): Node[] {
   const { shoulderY, hipY, shoulder, armOut, upperArm, forearm, wrist, stance, hip } = build;
   const shoulderX = CX + side * (shoulder - 0.9);
   const elbowY = (shoulderY + hipY) / 2 + 1.6;
   let elbowX = CX + side * (shoulder + armOut + 0.8);
   let wristX = CX + side * (shoulder - 0.8 + armOut * 0.4);
   let wristY = hipY - 1.4;
-  if (stance === 'clasped') {
+  // Hands go back to hanging the moment a resident sets off: a hand in a pocket
+  // does not swing.
+  if (!walking && stance === 'clasped') {
     elbowX = CX + side * (shoulder + armOut + 0.2);
     wristX = CX + side * 3.2;
     wristY = hipY - 0.4;
-  } else if (stance === 'pocket' && side === -1) {
+  } else if (!walking && stance === 'pocket' && side === -1) {
     elbowX = CX + side * (shoulder + armOut + 1.8);
     wristX = CX - (hip - 1.6);
     wristY = hipY - 3.4;
@@ -821,9 +823,19 @@ function Arm({
   id,
   cut,
   side,
-}: PartProps & { id: (part: string) => string; cut: GarmentCut; side: 1 | -1 }) {
-  const spine = armSpine(build, side);
+  step = 0,
+  walking = false,
+}: PartProps & {
+  id: (part: string) => string;
+  cut: GarmentCut;
+  side: 1 | -1;
+  /** Signed swing of this arm, -1 back, 0 hanging, 1 forward. */
+  step?: number;
+  walking?: boolean;
+}) {
+  const spine = armSpine(build, side, walking);
   const wrist = spine[spine.length - 1];
+  const shoulder = { x: CX + side * (build.shoulder - 0.9), y: build.shoulderY + 1.2 };
   const short = cut === 'shirt' || cut === 'tunic';
   const cuffY = wrist.y - (short ? 5.8 : 1.4);
   const sleeve = limbOutline([...spine.slice(0, -1), { x: wrist.x, y: cuffY, w: build.wrist * 1.08 }]);
@@ -834,7 +846,7 @@ function Arm({
   ]);
 
   return (
-    <>
+    <G transform={`rotate(${-step * 17} ${shoulder.x} ${shoulder.y})`}>
       <Path d={sleeve} fill={`url(#${id('cloth')})`} stroke={colours.contour} strokeWidth={1} />
       {/* Light down the outside of the sleeve, shade down the inside. */}
       <Path
@@ -879,63 +891,95 @@ function Arm({
         strokeWidth={0.55}
         fill="none"
       />
-    </>
+    </G>
   );
 }
 
-/** One leg: a thigh, a knee, a calf and an ankle, in one tapered outline. */
-function Leg({ build, colours, id, side }: PartProps & { id: (part: string) => string; side: 1 | -1 }) {
+/**
+ * One leg, hinged twice: the whole leg swings from the hip, the shin folds at
+ * the knee, and the shoe follows the ankle. A leg that only swings from the hip
+ * walks like a compass, and that is the difference between a diagram and a body.
+ */
+function Leg({
+  build,
+  colours,
+  id,
+  side,
+  step = 0,
+}: PartProps & {
+  id: (part: string) => string;
+  side: 1 | -1;
+  /** Signed step of this leg, -1 at the back of the stride, 1 at the front. */
+  step?: number;
+}) {
   const { hipY, kneeY, ankleY, legSpread, thigh, knee, ankle } = build;
   const hipX = CX + side * legSpread;
   const ankleX = hipX + side * 0.5;
-  const leg = limbOutline([
+  const swing = step * 22;
+  // The knee only folds one way, and only while the leg is on its way back.
+  const fold = Math.max(0, -step) * 34;
+  const thighPath = limbOutline([
     { x: hipX, y: hipY - 3, w: thigh },
     { x: hipX + side * 0.3, y: (hipY + kneeY) / 2, w: (thigh + knee) * 0.52 },
-    { x: ankleX - side * 0.2, y: kneeY, w: knee },
+    { x: hipX + side * 0.1, y: kneeY + 2, w: knee * 0.98 },
+  ]);
+  const shinPath = limbOutline([
+    { x: hipX + side * 0.1, y: kneeY - 3, w: knee * 0.98 },
     { x: ankleX + side * 0.2, y: kneeY + 7.5, w: (knee + ankle) * 0.54 },
     { x: ankleX, y: ankleY, w: ankle },
   ]);
 
   return (
-    <>
-      <Path d={leg} fill={`url(#${id('leg')})`} stroke={colours.contour} strokeWidth={1} />
+    <G transform={`rotate(${swing} ${hipX} ${hipY})`}>
+      <Path d={thighPath} fill={`url(#${id('leg')})`} stroke={colours.contour} strokeWidth={1} />
       <Path
         d={smoothOpen([
           { x: hipX + side * thigh * 0.34, y: hipY + 2 },
-          { x: hipX + side * knee * 0.32, y: kneeY - 2 },
-          { x: ankleX + side * ankle * 0.28, y: ankleY - 3 },
+          { x: hipX + side * knee * 0.32, y: kneeY - 4 },
         ])}
         stroke={withAlpha(colours.trouserLit, 0.34)}
         strokeWidth={1.5}
         fill="none"
       />
-      <Path
-        d={smoothOpen([
-          { x: hipX - side * thigh * 0.3, y: hipY + 4 },
-          { x: hipX - side * knee * 0.28, y: kneeY - 3 },
-          { x: ankleX - side * ankle * 0.3, y: ankleY - 4 },
-        ])}
-        stroke={withAlpha(colours.trouserDeep, 0.5)}
-        strokeWidth={1.5}
-        fill="none"
-      />
-      {/* The fold a trouser keeps at the knee. */}
-      <Path
-        d={smoothOpen([
-          { x: hipX - side * thigh * 0.4, y: kneeY + 1.4 },
-          { x: hipX + side * 0.4, y: kneeY + 2.6 },
-          { x: hipX + side * knee * 0.42, y: kneeY + 1 },
-        ])}
-        stroke={withAlpha(colours.trouserDeep, 0.42)}
-        strokeWidth={0.8}
-        fill="none"
-      />
-    </>
+      <G transform={`rotate(${fold} ${hipX} ${kneeY})`}>
+        <Path d={shinPath} fill={`url(#${id('leg')})`} stroke={colours.contour} strokeWidth={1} />
+        <Path
+          d={smoothOpen([
+            { x: hipX + side * knee * 0.36, y: kneeY + 1 },
+            { x: ankleX + side * ankle * 0.28, y: ankleY - 3 },
+          ])}
+          stroke={withAlpha(colours.trouserLit, 0.3)}
+          strokeWidth={1.4}
+          fill="none"
+        />
+        <Path
+          d={smoothOpen([
+            { x: hipX - side * knee * 0.3, y: kneeY + 1 },
+            { x: ankleX - side * ankle * 0.3, y: ankleY - 4 },
+          ])}
+          stroke={withAlpha(colours.trouserDeep, 0.5)}
+          strokeWidth={1.5}
+          fill="none"
+        />
+        {/* The fold a trouser keeps at the knee. */}
+        <Path
+          d={smoothOpen([
+            { x: hipX - side * knee * 0.4, y: kneeY + 2.4 },
+            { x: hipX + side * 0.4, y: kneeY + 3.6 },
+            { x: hipX + side * knee * 0.42, y: kneeY + 2 },
+          ])}
+          stroke={withAlpha(colours.trouserDeep, 0.42)}
+          strokeWidth={0.8}
+          fill="none"
+        />
+        <Shoe build={build} colours={colours} side={side} angle={-step * 12 - fold * 0.4} />
+      </G>
+    </G>
   );
 }
 
 /** A shoe: heel, sole, toe, and the small break where the trouser meets it. */
-function Shoe({ build, colours, side }: PartProps & { side: 1 | -1 }) {
+function Shoe({ build, colours, side, angle = 0 }: PartProps & { side: 1 | -1; angle?: number }) {
   const { ankleY, legSpread, ankle } = build;
   const { trouserDeep } = colours;
   const cx = CX + side * legSpread + side * 0.5;
@@ -946,7 +990,7 @@ function Shoe({ build, colours, side }: PartProps & { side: 1 | -1 }) {
   ]);
 
   return (
-    <>
+    <G transform={`rotate(${angle} ${cx} ${ankleY})`}>
       <Path d={foot} fill={colours.shoe} stroke={colours.contour} strokeWidth={0.8} />
       <Path
         d={smoothOpen([
@@ -979,7 +1023,7 @@ function Shoe({ build, colours, side }: PartProps & { side: 1 | -1 }) {
         strokeWidth={1.2}
         fill="none"
       />
-    </>
+    </G>
   );
 }
 
@@ -1280,6 +1324,22 @@ function Torso({
  * Figure
  * ------------------------------------------------------------------ */
 
+/**
+ * How far through a step a body is.
+ *
+ * The stage computes this from the route, the figure only obeys it, so the same
+ * drawing stands at a counter or crosses a room without a second copy of the
+ * cast existing.
+ */
+export interface Stride {
+  /** 0 to 1 through one stride, 0 and 1 both being feet together. */
+  phase: number;
+  /** 0 standing still, 1 at full pace. */
+  amp: number;
+  /** 1 walking towards the right of the room, -1 towards the left. */
+  facing: number;
+}
+
 interface FigureProps {
   resident: Resident;
   /** Ambient light from the scene, 0 at night, 1 at noon. */
@@ -1290,9 +1350,11 @@ interface FigureProps {
   height?: number;
   /** Draw only the head and shoulders, for a portrait. */
   bust?: boolean;
+  /** Where the body is in its step, when it is walking. */
+  stride?: Stride;
 }
 
-export function Figure({ resident, light = 0.85, withEyes = true, width, height, bust = false }: FigureProps) {
+export function Figure({ resident, light = 0.85, withEyes = true, width, height, bust = false, stride }: FigureProps) {
   const look: Look = resident.look ?? FALLBACK_LOOK;
   const outfit = look.outfit ?? FALLBACK_LOOK.outfit;
   const mood = moodOf(resident);
@@ -1307,6 +1369,20 @@ export function Figure({ resident, light = 0.85, withEyes = true, width, height,
 
   const { headTop, headHalf, headTall, chin, neckY, eyeY, shoulderY, hipY, shoulder, waist, legSpread, ankleY } = build;
   const lightEdge = 0.16 + Math.max(0, Math.min(1, light)) * 0.24;
+
+  // The step itself: a leg swings one way, the other the other way, and the
+  // body rises twice per stride, once over each leg.
+  const pace = bust ? 0 : Math.max(0, Math.min(1, stride?.amp ?? 0));
+  const phase = stride?.phase ?? 0;
+  const swing = Math.sin(phase * Math.PI * 2) * pace;
+  const stepOf = (side: 1 | -1) => swing * side;
+  const bob = -1.7 * pace * (0.5 + 0.5 * Math.cos(phase * Math.PI * 4));
+  const lean = pace * 3.2;
+  // A resident walking to the left is the same body seen the other way round:
+  // the drawing is mirrored about its own spine, so the light on the face turns
+  // with them instead of contradicting the direction of the walk.
+  const mirrored = pace > 0.001 && (stride?.facing ?? 1) < 0;
+  const bodyTransform = `${mirrored ? `translate(${CX * 2} 0) scale(-1 1) ` : ''}translate(0 ${bob}) rotate(${build.spineLean * 0.4 + lean} ${CX} ${GROUND})`;
 
   const skull = smoothClosed([
     { x: CX, y: headTop },
@@ -1419,20 +1495,26 @@ export function Figure({ resident, light = 0.85, withEyes = true, width, height,
         opacity={0.7}
       />
 
-      <G transform={`rotate(${build.spineLean * 0.4} ${CX} ${GROUND})`}>
+      <G transform={bodyTransform}>
         <HairBack build={build} colours={colours} id={id} style={look.hairstyle} />
 
         {([-1, 1] as const).map((side) => (
-          <Leg key={`leg${side}`} build={build} colours={colours} id={id} side={side} />
-        ))}
-        {([-1, 1] as const).map((side) => (
-          <Shoe key={`shoe${side}`} build={build} colours={colours} side={side} />
+          <Leg key={`leg${side}`} build={build} colours={colours} id={id} side={side} step={stepOf(side)} />
         ))}
 
         <Torso build={build} colours={colours} id={id} cut={cut} accent={outfit.accent} />
 
         {([-1, 1] as const).map((side) => (
-          <Arm key={`arm${side}`} build={build} colours={colours} id={id} cut={cut} side={side} />
+          <Arm
+            key={`arm${side}`}
+            build={build}
+            colours={colours}
+            id={id}
+            cut={cut}
+            side={side}
+            step={stepOf(side)}
+            walking={pace > 0.001}
+          />
         ))}
 
         <Path d={neck} fill={`url(#${id('skin')})`} stroke={colours.contour} strokeWidth={0.8} />
